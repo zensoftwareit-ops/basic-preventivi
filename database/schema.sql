@@ -6,12 +6,14 @@ CREATE TABLE IF NOT EXISTS users (
     first_name VARCHAR(80) NOT NULL,
     last_name VARCHAR(80) NOT NULL,
     email VARCHAR(180) NOT NULL,
+    role ENUM('operator', 'admin') NOT NULL DEFAULT 'operator',
     active TINYINT(1) NOT NULL DEFAULT 1,
     last_login_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NULL,
     INDEX idx_users_active (active),
-    INDEX idx_users_email (email)
+    INDEX idx_users_email (email),
+    INDEX idx_users_role_active (role, active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS services (

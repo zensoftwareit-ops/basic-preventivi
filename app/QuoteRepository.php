@@ -20,7 +20,7 @@ final class QuoteRepository
             'priorities' => $this->fetchAll('SELECT id, name, color, weight, active FROM priorities' . $active . ' ORDER BY weight DESC, name'),
             'statuses' => $this->fetchAll('SELECT id, code, name, color, is_closed, active FROM statuses' . $active . ' ORDER BY sort_order, name'),
             'outcomes' => $this->fetchAll('SELECT id, code, name, is_success, active FROM outcomes' . $active . ' ORDER BY sort_order, name'),
-            'users' => $this->fetchAll("SELECT id, username, first_name, last_name, email, active,
+            'users' => $this->fetchAll("SELECT id, username, first_name, last_name, email, role, active,
                 TRIM(CONCAT(first_name, ' ', last_name)) AS display_name
                 FROM users" . $active . " ORDER BY last_name, first_name"),
         ];
@@ -255,6 +255,30 @@ final class QuoteRepository
         }
         $statement->execute();
         return $statement->fetchAll();
+    }
+
+    public function deleteQuote(int $quoteId, int $actorId): void
+    {
+        $adminStatement = $this->pdo->prepare('SELECT role FROM users WHERE id = :id AND active = 1');
+        $adminStatement->execute(['id' => $actorId]);
+        if ($adminStatement->fetchColumn() !== 'admin') {
+            throw new RuntimeException('Solo un amministratore può eliminare definitivamente un preventivo.');
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            $statement = $this->pdo->prepare('DELETE FROM quotes WHERE id = :id');
+            $statement->execute(['id' => $quoteId]);
+            if ($statement->rowCount() !== 1) {
+                throw new RuntimeException('Preventivo non trovato.');
+            }
+            $this->pdo->commit();
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $exception;
+        }
     }
 
     public function dashboard(int $userId): array

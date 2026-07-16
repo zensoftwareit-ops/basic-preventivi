@@ -8,6 +8,8 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 
 - SSO senza form con `id` utente e token condiviso;
 - l’utente deve esistere nella tabella `users` ed essere attivo;
+- ogni utente ha ruolo `operator` oppure `admin`;
+- solo gli admin vedono e possono aprire **Dati base** ed eliminare definitivamente i preventivi;
 - scadenza di invio non modificabile, fissata a 24 ore dalla creazione della pratica;
 - primo alert interno ed email dopo 12 ore se il preventivo non risulta inviato;
 - secondo alert interno ed email dopo 24 ore se il preventivo non risulta inviato;
@@ -60,7 +62,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 3. Importare `database/schema.sql`.
 4. Se un tentativo precedente è terminato con l’errore MySQL `#1293`, eliminare le tabelle create parzialmente prima di ripetere l’importazione.
 
-### 4. Creare il primo operatore
+### 4. Creare il primo amministratore
 
 L’SSO non crea automaticamente gli utenti. In phpMyAdmin aprire la tabella `users`, scegliere **Inserisci** e compilare:
 
@@ -69,6 +71,7 @@ L’SSO non crea automaticamente gli utenti. In phpMyAdmin aprire la tabella `us
 - `first_name`: nome;
 - `last_name`: cognome;
 - `email`: indirizzo che riceverà alert e follow-up;
+- `role`: `admin` per il primo amministratore, `operator` per gli operatori normali;
 - `active`: `1` per attivo, `0` per disattivo.
 
 Annotare l’`id` assegnato: sarà il valore passato a `sso.php`.
@@ -76,8 +79,8 @@ Annotare l’`id` assegnato: sarà il valore passato a `sso.php`.
 Esempio SQL equivalente:
 
 ```sql
-INSERT INTO users (username, first_name, last_name, email, active)
-VALUES ('mario.rossi', 'Mario', 'Rossi', 'mario.rossi@example.it', 1);
+INSERT INTO users (username, first_name, last_name, email, role, active)
+VALUES ('mario.rossi', 'Mario', 'Rossi', 'mario.rossi@example.it', 'admin', 1);
 ```
 
 ### 5. Configurazione privata
@@ -186,6 +189,20 @@ https://preventivi.example.it/sso.php?id=12&token=TOKEN_CONDIVISO
 
 Il token è l’unica credenziale condivisa. L’`id` serve esclusivamente a individuare l’operatore nella tabella `users`. L’accesso fallisce se l’utente non esiste o ha `active = 0`.
 
+## Ruoli e permessi
+
+- `operator`: usa dashboard, preventivi, follow-up ed esportazione Excel; non vede e non può aprire **Dati base**;
+- `admin`: dispone delle stesse funzioni e può inoltre aprire **Dati base** ed eliminare definitivamente un preventivo;
+- il controllo è applicato lato server: nascondere il collegamento non è l’unica protezione;
+- l'eliminazione è definitiva e rimuove anche cronologia e notifiche collegate al preventivo.
+
+Per modificare un ruolo da phpMyAdmin:
+
+```sql
+UPDATE users SET role = 'admin' WHERE id = 1;
+UPDATE users SET role = 'operator' WHERE id = 2;
+```
+
 ## Esportazione Excel
 
 Nella pagina **Preventivi** usare il pulsante **Esporta XLSX**. Il file include tutte le pratiche che corrispondono ai filtri correnti, non soltanto le 25 righe della pagina visualizzata.
@@ -210,15 +227,18 @@ POST consigliato:
 
 1. Eseguire Pull e deploy del nuovo codice.
 2. Fare un backup del database.
-3. Importare una sola volta:
+3. Se non è mai stata eseguita la migration utenti/notifiche, importare nell'ordine:
 
    ```text
    database/migrations/20260716_users_sso_and_notifications.sql
+   database/migrations/20260716_add_user_roles.sql
    ```
 
-4. La migration converte la precedente tabella utenti e crea `operator_notifications`.
-5. Aggiornare manualmente tutte le email provvisorie `@example.invalid` con gli indirizzi reali degli operatori.
-6. Aggiornare il software chiamante affinché passi `id` invece di `operator` o `username`.
+4. Se la prima migration era già stata importata, eseguire soltanto `database/migrations/20260716_add_user_roles.sql`.
+5. La migration ruoli imposta tutti come `operator` e promuove automaticamente ad `admin` il primo utente attivo per evitare di bloccare l'amministrazione.
+6. Verificare e correggere i ruoli dalla tabella `users` in phpMyAdmin.
+7. Aggiornare manualmente tutte le email provvisorie `@example.invalid` con gli indirizzi reali degli operatori.
+8. Aggiornare il software chiamante affinché passi `id` invece di `operator` o `username`.
 
 ## Aggiornamenti futuri
 

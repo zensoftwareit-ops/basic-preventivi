@@ -18,7 +18,7 @@ final class Auth
 
         $pdo = Database::connection();
         $userStatement = $pdo->prepare(
-            "SELECT id, username, first_name, last_name, email,
+            "SELECT id, username, first_name, last_name, email, role,
                     TRIM(CONCAT(first_name, ' ', last_name)) AS display_name
              FROM users WHERE id = :id AND active = 1"
         );
@@ -55,10 +55,32 @@ final class Auth
         return self::check() ? (int) $_SESSION['user']['id'] : null;
     }
 
+    public static function isAdmin(): bool
+    {
+        return self::check() && (string) ($_SESSION['user']['role'] ?? 'operator') === 'admin';
+    }
+
+    public static function requireAdmin(): void
+    {
+        self::requireLogin();
+        if (!self::isAdmin()) {
+            http_response_code(403);
+            render_public_error('Accesso non consentito', 'Questa funzione è riservata agli amministratori.');
+            exit;
+        }
+    }
+
     public static function requireLogin(): void
     {
         if (self::check()) {
-            return;
+            $statement = Database::connection()->prepare('SELECT role, active FROM users WHERE id = :id');
+            $statement->execute(['id' => self::id()]);
+            $user = $statement->fetch();
+            if ($user && (int) $user['active'] === 1) {
+                $_SESSION['user']['role'] = (string) $user['role'];
+                return;
+            }
+            $_SESSION = [];
         }
 
         http_response_code(401);

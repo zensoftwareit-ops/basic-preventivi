@@ -41,8 +41,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash('success', 'Pratica archiviata.');
                 redirect(url('index.php', ['page' => 'quotes', 'view' => 'archived']));
 
+            case 'delete_quote':
+                Auth::requireAdmin();
+                $repository->deleteQuote((int) $_POST['id'], (int) Auth::id());
+                flash('success', 'Preventivo eliminato definitivamente.');
+                redirect(url('index.php', ['page' => 'quotes']));
+
             case 'add_master':
             case 'toggle_master':
+                Auth::requireAdmin();
                 if ($action === 'add_master') {
                     $repository->addMasterItem((string) $_POST['type'], (string) $_POST['name']);
                     flash('success', 'Elemento aggiunto.');
@@ -99,6 +106,7 @@ try {
             break;
 
         case 'settings':
+            Auth::requireAdmin();
             render_settings($repository->masterData(true));
             break;
 

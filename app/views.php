@@ -12,8 +12,10 @@ function render_header(string $title, string $active = 'dashboard'): void
         'dashboard' => ['Dashboard', ['page' => 'dashboard']],
         'quotes' => ['Preventivi', ['page' => 'quotes']],
         'followups' => ['Follow-up', ['page' => 'followups']],
-        'settings' => ['Dati base', ['page' => 'settings']],
     ];
+    if (Auth::isAdmin()) {
+        $items['settings'] = ['Dati base', ['page' => 'settings']];
+    }
 
     echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
     echo '<meta name="color-scheme" content="light"><title>' . $titleSafe . ' · ' . $appName . '</title>';
@@ -24,7 +26,8 @@ function render_header(string $title, string $active = 'dashboard'): void
         $class = $active === $key ? 'nav-link active' : 'nav-link';
         echo '<a class="' . $class . '" href="' . e(url('index.php', $query)) . '"><span>' . e($label) . '</span></a>';
     }
-    echo '</nav><div class="sidebar-footer"><span class="avatar">' . e(mb_strtoupper(mb_substr($user['display_name'] ?? 'U', 0, 1))) . '</span><div><strong>' . e($user['display_name'] ?? '') . '</strong><small>Operatore</small></div><a class="logout" href="' . e(url('logout.php')) . '" title="Esci">Esci</a></div></aside>';
+    $roleLabel = Auth::isAdmin() ? 'Amministratore' : 'Operatore';
+    echo '</nav><div class="sidebar-footer"><span class="avatar">' . e(mb_strtoupper(mb_substr($user['display_name'] ?? 'U', 0, 1))) . '</span><div><strong>' . e($user['display_name'] ?? '') . '</strong><small>' . e($roleLabel) . '</small></div><a class="logout" href="' . e(url('logout.php')) . '" title="Esci">Esci</a></div></aside>';
     echo '<div class="app-shell"><header class="topbar"><button class="menu-button" type="button" data-menu aria-label="Apri menu">☰</button><div><h1>' . $titleSafe . '</h1><p>' . e((new DateTimeImmutable())->format('d/m/Y')) . '</p></div><a class="button primary compact" href="' . e(url('index.php', ['page' => 'quote_new'])) . '">+ Nuova richiesta</a></header><main class="content">';
     foreach ($flashes as $flash) {
         echo '<div class="alert ' . e($flash['type']) . '">' . e($flash['message']) . '</div>';
@@ -284,6 +287,9 @@ function render_quote_detail(array $quote): void
     if (!$quote['archived_at']) {
         echo '<form method="post" action="index.php" data-confirm="Archiviare questa pratica?"><input type="hidden" name="action" value="archive_quote"><input type="hidden" name="id" value="' . (int) $quote['id'] . '">' . csrf_field() . '<button class="button danger full" type="submit">Archivia pratica</button></form>';
     }
+    if (Auth::isAdmin()) {
+        echo '<form method="post" action="index.php" class="danger-zone" data-confirm="Eliminare definitivamente questo preventivo? L’operazione non può essere annullata."><input type="hidden" name="action" value="delete_quote"><input type="hidden" name="id" value="' . (int) $quote['id'] . '">' . csrf_field() . '<button class="button danger full" type="submit">Elimina definitivamente</button></form>';
+    }
     echo '</aside></section>';
     render_footer();
 }
@@ -325,7 +331,7 @@ function render_settings(array $master): void
     }
     echo '</div></article><article class="panel"><div class="panel-head"><h3>Operatori SSO</h3></div><div class="master-list">';
     foreach ($master['users'] as $item) {
-        echo '<div class="master-item"><span><strong>' . e($item['display_name']) . '</strong><small>ID ' . (int) $item['id'] . ' · ' . e($item['username']) . ' · ' . e($item['email']) . '</small></span><span class="role-pill">' . ((int) $item['active'] ? 'Attivo' : 'Disattivo') . '</span></div>';
+        echo '<div class="master-item"><span><strong>' . e($item['display_name']) . '</strong><small>ID ' . (int) $item['id'] . ' · ' . e($item['username']) . ' · ' . e($item['email']) . '</small></span><span class="role-pill">' . e($item['role']) . ' · ' . ((int) $item['active'] ? 'Attivo' : 'Disattivo') . '</span></div>';
     }
     echo '</div></article></section>';
     render_footer();
