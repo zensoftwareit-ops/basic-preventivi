@@ -119,7 +119,8 @@ final class QuoteRepository
         }
         unset($data['created_by_user_id']);
         $data['id'] = $id;
-        $data['status_id_check'] = $data['status_id'];
+        $data['status_id_followup_check'] = $data['status_id'];
+        $data['status_id_changed_check'] = $data['status_id'];
 
         $this->pdo->beginTransaction();
         try {
@@ -130,8 +131,8 @@ final class QuoteRepository
                     phone = :phone, email = :email, channel_id = :channel_id, service_id = :service_id,
                     request_description = :request_description, received_by_user_id = :received_by_user_id,
                     responsible_user_id = :responsible_user_id, priority_id = :priority_id,
-                    next_followup_at = IF(status_id <> :status_id_check, DATE_ADD(NOW(), INTERVAL 3 DAY), next_followup_at),
-                    status_changed_at = IF(status_id <> :status_id_check, NOW(), status_changed_at),
+                    next_followup_at = IF(status_id <> :status_id_followup_check, DATE_ADD(NOW(), INTERVAL 3 DAY), next_followup_at),
+                    status_changed_at = IF(status_id <> :status_id_changed_check, NOW(), status_changed_at),
                     status_id = :status_id, date_sent = :date_sent,
                     estimated_value = :estimated_value, probability = :probability,
                     last_update_at = NOW(),
@@ -641,8 +642,15 @@ final class QuoteRepository
         }
 
         if (($filters['q'] ?? '') !== '') {
-            $conditions[] = '(q.practice_code LIKE :search OR q.customer_name LIKE :search OR q.customer_contact LIKE :search OR q.request_description LIKE :search)';
-            $params['search'] = '%' . trim((string) $filters['q']) . '%';
+            $search = '%' . trim((string) $filters['q']) . '%';
+            $conditions[] = '(q.practice_code LIKE :search_practice
+                OR q.customer_name LIKE :search_customer
+                OR q.customer_contact LIKE :search_contact
+                OR q.request_description LIKE :search_description)';
+            $params['search_practice'] = $search;
+            $params['search_customer'] = $search;
+            $params['search_contact'] = $search;
+            $params['search_description'] = $search;
         }
         foreach (['responsible_user_id' => 'q.responsible_user_id', 'status_id' => 'q.status_id', 'priority_id' => 'q.priority_id'] as $key => $column) {
             if ((int) ($filters[$key] ?? 0) > 0) {
