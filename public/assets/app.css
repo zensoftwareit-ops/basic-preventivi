@@ -180,7 +180,6 @@ input::placeholder, textarea::placeholder { color: #a8b0bd; }
 .pagination { display: flex; justify-content: center; gap: 5px; margin-top: 18px; }
 .pagination a { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--muted); font-size: 11px; }
 .pagination a.active { border-color: var(--blue); color: white; background: var(--blue); }
-.danger-zone { margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0d5d8; }
 
 .quote-form { max-width: 1100px; margin: 0 auto; }
 .form-toolbar { margin-bottom: 18px; }
@@ -197,6 +196,8 @@ input::placeholder, textarea::placeholder { color: #a8b0bd; }
 .sticky-save span { color: var(--muted); font-size: 11px; }
 
 .detail-head { margin-bottom: 20px; }
+.detail-actions { display: flex; align-items: center; gap: 8px; }
+.detail-actions form { margin: 0; }
 .detail-badges { display: flex; align-items: center; gap: 8px; }
 .detail-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(310px, .75fr); gap: 20px; align-items: start; }
 .detail-side { display: grid; gap: 16px; }
@@ -280,6 +281,8 @@ input::placeholder, textarea::placeholder { color: #a8b0bd; }
   .topbar .button::after { font-size: 22px; content: "+"; }
   .content { padding: 20px 14px 42px; }
   .hero-row, .detail-head, .form-toolbar { align-items: flex-start; flex-direction: column; }
+  .detail-actions { width: 100%; }
+  .detail-actions .button { flex: 1; }
   .kpi-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
   .kpi-card { min-height: 126px; padding: 14px; }
   .kpi-card > strong { font-size: 21px; }

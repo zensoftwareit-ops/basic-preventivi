@@ -243,7 +243,11 @@ function textarea_field(string $name, string $label, mixed $value, array $errors
 function render_quote_detail(array $quote): void
 {
     render_header($quote['practice_code'], 'quotes');
-    echo '<div class="detail-head"><div><div class="detail-badges">' . status_badge($quote['status_name'], $quote['status_color']) . traffic_badge($quote['traffic_light']) . '</div><h2>' . e($quote['customer_name']) . '</h2><p>' . e($quote['service_name']) . ' · Responsabile ' . e($quote['responsible_name']) . '</p></div><div><a class="button secondary" href="' . e(url('index.php', ['page' => 'quote_edit', 'id' => $quote['id']])) . '">Modifica</a></div></div>';
+    echo '<div class="detail-head"><div><div class="detail-badges">' . status_badge($quote['status_name'], $quote['status_color']) . traffic_badge($quote['traffic_light']) . '</div><h2>' . e($quote['customer_name']) . '</h2><p>' . e($quote['service_name']) . ' · Responsabile ' . e($quote['responsible_name']) . '</p></div><div class="detail-actions"><a class="button secondary" href="' . e(url('index.php', ['page' => 'quote_edit', 'id' => $quote['id']])) . '">Modifica</a>';
+    if (Auth::isAdmin()) {
+        echo '<form method="post" action="index.php" data-confirm="Eliminare definitivamente questo preventivo? L’operazione non può essere annullata."><input type="hidden" name="action" value="delete_quote"><input type="hidden" name="id" value="' . (int) $quote['id'] . '">' . csrf_field() . '<button class="button danger" type="submit">Elimina preventivo</button></form>';
+    }
+    echo '</div></div>';
     echo '<section class="detail-grid"><article class="panel detail-main"><div class="panel-head"><h3>Dati pratica</h3><span>Aggiornata ' . e(date_it($quote['last_update_at'], true)) . '</span></div><dl class="data-list">';
     detail_item('Data richiesta', date_it($quote['request_date']) . ($quote['request_time'] ? ' ' . substr($quote['request_time'], 0, 5) : ''));
     detail_item('Referente cliente', $quote['customer_contact'] ?: '—');
@@ -286,9 +290,6 @@ function render_quote_detail(array $quote): void
     echo '</div></article>';
     if (!$quote['archived_at']) {
         echo '<form method="post" action="index.php" data-confirm="Archiviare questa pratica?"><input type="hidden" name="action" value="archive_quote"><input type="hidden" name="id" value="' . (int) $quote['id'] . '">' . csrf_field() . '<button class="button danger full" type="submit">Archivia pratica</button></form>';
-    }
-    if (Auth::isAdmin()) {
-        echo '<form method="post" action="index.php" class="danger-zone" data-confirm="Eliminare definitivamente questo preventivo? L’operazione non può essere annullata."><input type="hidden" name="action" value="delete_quote"><input type="hidden" name="id" value="' . (int) $quote['id'] . '">' . csrf_field() . '<button class="button danger full" type="submit">Elimina definitivamente</button></form>';
     }
     echo '</aside></section>';
     render_footer();
