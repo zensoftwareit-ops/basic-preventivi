@@ -31,19 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 clear_old();
                 redirect(url('index.php', ['page' => 'quote_view', 'id' => $id]));
 
-            case 'complete_followup':
-                $repository->completeFollowup((int) $_POST['id'], (int) Auth::id(), (string) ($_POST['note'] ?? ''));
-                flash('success', 'Follow-up completato.');
-                redirect(url('index.php', ['page' => 'followups']));
-
-            case 'postpone_followup':
-                $repository->postponeFollowup((int) $_POST['id'], (int) ($_POST['days'] ?? 1), (int) Auth::id());
-                flash('success', 'Follow-up riprogrammato.');
-                redirect(url('index.php', ['page' => 'followups']));
-
-            case 'acknowledge_reminder':
-                $repository->acknowledgeReminder((int) $_POST['id'], (int) Auth::id());
-                flash('success', 'Reminder preso in carico.');
+            case 'acknowledge_notification':
+                $repository->acknowledgeNotification((int) $_POST['id'], (int) Auth::id());
+                flash('success', 'Notifica presa in carico.');
                 redirect(url('index.php'));
 
             case 'archive_quote':
@@ -111,8 +101,8 @@ try {
             break;
 
         case 'followups':
-            $view = (string) ($_GET['view'] ?? 'due');
-            render_followups($repository->followups($view), $view);
+            $repository->generateNotifications();
+            render_followups($repository->followups((int) Auth::id()));
             break;
 
         case 'settings':

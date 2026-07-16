@@ -44,8 +44,9 @@ function status_badge(string $name, ?string $color): string
 
 function traffic_badge(string $traffic): string
 {
-    $labels = ['SCADUTO' => 'Scaduto', 'OGGI' => 'Oggi', 'NEI TEMPI' => 'Nei tempi', 'CHIUSO' => 'Chiuso'];
-    return '<span class="traffic ' . e(strtolower($traffic)) . '"><i></i>' . e($labels[$traffic] ?? $traffic) . '</span>';
+    $labels = ['SCADUTO_24' => 'Scaduto 24–48 h', 'SCADUTO_48' => 'Scaduto oltre 48 h', 'NEI TEMPI' => 'Nei tempi', 'CHIUSO' => 'Chiuso'];
+    $class = strtolower(str_replace(['_', ' '], '-', $traffic));
+    return '<span class="traffic ' . e($class) . '"><i></i>' . e($labels[$traffic] ?? $traffic) . '</span>';
 }
 
 function render_dashboard(array $data): void
@@ -53,11 +54,15 @@ function render_dashboard(array $data): void
     $m = $data['metrics'];
     render_header('Dashboard', 'dashboard');
     echo '<section class="hero-row"><div><span class="eyebrow">Controllo operativo</span><h2>La situazione dei preventivi, adesso.</h2><p>Ritardi, scadenze, carico e valore economico in un’unica vista.</p></div><a class="button secondary" href="' . e(url('index.php', ['page' => 'quotes', 'view' => 'open'])) . '">Vedi pratiche aperte</a></section>';
-    if ($data['reminders'] !== []) {
-        echo '<section class="reminder-panel"><div class="reminder-heading"><div><span class="eyebrow">Richiede attenzione</span><h3>Preventivi senza cambio stato da oltre 3 giorni</h3></div><span class="reminder-count">' . count($data['reminders']) . '</span></div><div class="reminder-list">';
-        foreach ($data['reminders'] as $reminder) {
-            $days = max(3, (int) floor((int) $reminder['stale_hours'] / 24));
-            echo '<article class="reminder-item"><span class="reminder-mark">!</span><div><a href="' . e(url('index.php', ['page' => 'quote_view', 'id' => $reminder['quote_id']])) . '">' . e($reminder['practice_code'] . ' · ' . $reminder['customer_name']) . '</a><small>' . e($reminder['service_name'] . ' · Stato “' . $reminder['status_name'] . '” da ' . $days . ' giorni') . '</small></div><form method="post" action="index.php">' . csrf_field() . '<input type="hidden" name="action" value="acknowledge_reminder"><input type="hidden" name="id" value="' . (int) $reminder['id'] . '"><button class="button warning compact" type="submit">Presa in carico</button></form></article>';
+    if ($data['notifications'] !== []) {
+        echo '<section class="reminder-panel"><div class="reminder-heading"><div><span class="eyebrow">Richiede attenzione</span><h3>Alert e follow-up assegnati a te</h3></div><span class="reminder-count">' . count($data['notifications']) . '</span></div><div class="reminder-list">';
+        foreach ($data['notifications'] as $notification) {
+            [$mark, $detail] = match ($notification['notification_type']) {
+                'deadline_12h' => ['12h', 'Primo alert: il preventivo non risulta ancora inviato.'],
+                'deadline_24h' => ['24h', 'Secondo alert: la scadenza di invio è stata superata.'],
+                default => ['3g', 'Follow-up automatico: stato invariato da altri 3 giorni.'],
+            };
+            echo '<article class="reminder-item"><span class="reminder-mark">' . e($mark) . '</span><div><a href="' . e(url('index.php', ['page' => 'quote_view', 'id' => $notification['quote_id']])) . '">' . e($notification['practice_code'] . ' · ' . $notification['customer_name']) . '</a><small>' . e($notification['service_name'] . ' · ' . $detail) . '</small></div><form method="post" action="index.php">' . csrf_field() . '<input type="hidden" name="action" value="acknowledge_notification"><input type="hidden" name="id" value="' . (int) $notification['id'] . '"><button class="button warning compact" type="submit">Presa in carico</button></form></article>';
         }
         echo '</div></section>';
     }
@@ -181,9 +186,9 @@ function render_quote_form(?array $quote, array $master, array $errors): void
     select_field('responsible_user_id', 'Responsabile *', $master['users'], form_value($quote, 'responsible_user_id', Auth::id()), $errors, 'display_name');
     select_field('priority_id', 'Priorità *', $master['priorities'], form_value($quote, 'priority_id', $defaults['priority_id']), $errors, 'name');
     select_field('status_id', 'Stato *', $master['statuses'], form_value($quote, 'status_id', $defaults['status_id']), $errors, 'name');
-    input_field('quote_deadline', 'Scadenza preventivo *', 'datetime-local', datetime_input(form_value($quote, 'quote_deadline', (new DateTimeImmutable('+1 day'))->format('Y-m-d H:i:s'))), $errors);
+    input_field('quote_deadline', 'Scadenza invio automatica', 'datetime-local', datetime_input(form_value($quote, 'quote_deadline', (new DateTimeImmutable('+24 hours'))->format('Y-m-d H:i:s'))), $errors, 'Fissa a 24 ore dall’inserimento', '', 'readonly');
     input_field('date_sent', 'Data invio', 'datetime-local', datetime_input(form_value($quote, 'date_sent')), $errors);
-    input_field('next_followup_at', 'Prossimo follow-up', 'datetime-local', datetime_input(form_value($quote, 'next_followup_at')), $errors, 'Automatico a 3, 7 e 15 giorni dopo l’invio');
+    input_field('next_followup_at', 'Prossimo follow-up automatico', 'datetime-local', datetime_input(form_value($quote, 'next_followup_at', (new DateTimeImmutable('+3 days'))->format('Y-m-d H:i:s'))), $errors, 'Ogni 3 giorni senza cambio stato', '', 'readonly');
     input_field('external_link', 'Link gestionale / file', 'url', form_value($quote, 'external_link'), $errors, 'https://…');
     echo '</div></section>';
 
@@ -261,11 +266,8 @@ function render_quote_detail(array $quote): void
     }
     echo '</article><aside class="detail-side"><article class="panel"><div class="panel-head"><h3>Follow-up</h3></div><div class="timeline">';
     foreach ($quote['followups'] as $followup) {
-        echo '<div class="timeline-item ' . e($followup['status']) . '"><i></i><div><strong>' . e(date_it($followup['due_at'], true)) . '</strong><span>' . e(match ($followup['status']) { 'done' => 'Completato', 'skipped' => 'Saltato', default => 'Da eseguire' }) . '</span>';
-        if ($followup['notes']) {
-            echo '<small>' . e($followup['notes']) . '</small>';
-        }
-        echo '</div></div>';
+        $followupState = $followup['resolved_at'] ? 'Risolto dal cambio stato' : ($followup['acknowledged_at'] ? 'Preso in carico' : 'Notifica inviata');
+        echo '<div class="timeline-item"><i></i><div><strong>Follow-up automatico #' . (int) $followup['sequence_number'] . '</strong><span>' . e(date_it($followup['due_at'], true) . ' · ' . $followupState) . '</span></div></div>';
     }
     if ($quote['followups'] === []) {
         echo '<div class="empty-state compact"><strong>Nessun follow-up</strong><span>Verranno creati dopo l’invio.</span></div>';
@@ -290,20 +292,16 @@ function detail_item(string $label, string $value, bool $raw = false): void
     echo '<div><dt>' . e($label) . '</dt><dd>' . ($raw ? $value : e($value)) . '</dd></div>';
 }
 
-function render_followups(array $items, string $view): void
+function render_followups(array $items): void
 {
     render_header('Follow-up', 'followups');
-    echo '<div class="page-actions"><div class="tabs">';
-    foreach (['due' => 'Da fare', 'today' => 'Oggi', 'upcoming' => 'Programmati', 'all' => 'Tutti'] as $key => $label) {
-        echo '<a class="' . ($view === $key ? 'active' : '') . '" href="' . e(url('index.php', ['page' => 'followups', 'view' => $key])) . '">' . e($label) . '</a>';
-    }
-    echo '</div><span class="result-count">' . count($items) . ' attività</span></div><section class="followup-grid">';
+    echo '<section class="hero-row"><div><span class="eyebrow">Cadenza fissa</span><h2>Follow-up ogni 3 giorni</h2><p>Le scadenze sono automatiche e ripartono quando cambia lo stato del preventivo.</p></div><span class="result-count">' . count($items) . ' da gestire</span></section><section class="followup-grid">';
     foreach ($items as $item) {
         $late = new DateTimeImmutable($item['due_at']) < new DateTimeImmutable() ? ' late' : '';
-        echo '<article class="followup-card' . $late . '"><div class="followup-top"><span class="date-tile"><strong>' . e((new DateTimeImmutable($item['due_at']))->format('d')) . '</strong><small>' . e((new DateTimeImmutable($item['due_at']))->format('M')) . '</small></span><div><a href="' . e(url('index.php', ['page' => 'quote_view', 'id' => $item['quote_id']])) . '">' . e($item['customer_name']) . '</a><small>' . e($item['practice_code'] . ' · ' . $item['responsible_name']) . '</small></div>' . status_badge($item['status_name'], $item['status_color']) . '</div><div class="contact-row"><span>' . e($item['phone'] ?: 'Telefono non indicato') . '</span><span>' . e($item['email'] ?: 'Email non indicata') . '</span></div><div class="followup-actions"><form method="post" action="index.php">' . csrf_field() . '<input type="hidden" name="action" value="complete_followup"><input type="hidden" name="id" value="' . (int) $item['id'] . '"><input name="note" placeholder="Nota rapida (facoltativa)"><button class="button success compact" type="submit">Completato</button></form><form method="post" action="index.php">' . csrf_field() . '<input type="hidden" name="action" value="postpone_followup"><input type="hidden" name="id" value="' . (int) $item['id'] . '"><select name="days"><option value="1">+1 giorno</option><option value="3">+3 giorni</option><option value="7">+7 giorni</option></select><button class="button ghost compact" type="submit">Posticipa</button></form></div></article>';
+        echo '<article class="followup-card' . $late . '"><div class="followup-top"><span class="date-tile"><strong>' . e((new DateTimeImmutable($item['due_at']))->format('d')) . '</strong><small>' . e((new DateTimeImmutable($item['due_at']))->format('M')) . '</small></span><div><a href="' . e(url('index.php', ['page' => 'quote_view', 'id' => $item['quote_id']])) . '">' . e($item['customer_name']) . '</a><small>' . e($item['practice_code'] . ' · Follow-up #' . $item['sequence_number']) . '</small></div>' . status_badge($item['status_name'], $item['status_color']) . '</div><div class="contact-row"><span>' . e($item['phone'] ?: 'Telefono non indicato') . '</span><span>' . e($item['email'] ?: 'Email non indicata') . '</span></div><form method="post" action="index.php">' . csrf_field() . '<input type="hidden" name="action" value="acknowledge_notification"><input type="hidden" name="id" value="' . (int) $item['id'] . '"><button class="button warning compact full" type="submit">Presa in carico</button></form></article>';
     }
     if ($items === []) {
-        echo '<div class="panel empty-state"><strong>Nessun follow-up in questa vista</strong><span>Le attività verranno programmate automaticamente dopo l’invio del preventivo.</span></div>';
+        echo '<div class="panel empty-state"><strong>Nessun follow-up da gestire</strong><span>La prossima notifica verrà generata dopo 3 giorni senza cambio stato.</span></div>';
     }
     echo '</section>';
     render_footer();
@@ -326,7 +324,7 @@ function render_settings(array $master): void
     }
     echo '</div></article><article class="panel"><div class="panel-head"><h3>Operatori SSO</h3></div><div class="master-list">';
     foreach ($master['users'] as $item) {
-        echo '<div class="master-item"><span><strong>' . e($item['display_name']) . '</strong><small>' . e($item['username']) . '</small></span><span class="role-pill">Operatore</span></div>';
+        echo '<div class="master-item"><span><strong>' . e($item['display_name']) . '</strong><small>ID ' . (int) $item['id'] . ' · ' . e($item['username']) . ' · ' . e($item['email']) . '</small></span><span class="role-pill">' . ((int) $item['active'] ? 'Attivo' : 'Disattivo') . '</span></div>';
     }
     echo '</div></article></section>';
     render_footer();

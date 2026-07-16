@@ -11,8 +11,8 @@ require_once dirname(__DIR__) . '/app/bootstrap.php';
 
 try {
     $repository = new QuoteRepository();
-    $generated = $repository->generateStaleStatusReminders();
-    $email = $repository->dispatchReminderEmails();
+    $generated = $repository->generateNotifications();
+    $email = $repository->dispatchNotificationEmails();
 
     echo json_encode([
         'ok' => true,

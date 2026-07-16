@@ -15,12 +15,12 @@ return [
         'user' => 'UTENTE_DATABASE_PLESK',
         'password' => 'PASSWORD_DATABASE_PLESK',
     ],
-    'reminders' => [
-        'stale_after_hours' => 72,
-        'email_enabled' => false,
+    'notifications' => [
+        'email_enabled' => true,
         'email_from' => 'preventivi@example.it',
-        'operator_emails' => [
-            // 'mario.rossi' => 'mario.rossi@example.it',
+        'email_bcc' => [
+            'responsabile@example.it',
+            // 'direzione@example.it',
         ],
     ],
 ];

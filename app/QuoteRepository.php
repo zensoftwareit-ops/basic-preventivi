@@ -20,7 +20,9 @@ final class QuoteRepository
             'priorities' => $this->fetchAll('SELECT id, name, color, weight, active FROM priorities' . $active . ' ORDER BY weight DESC, name'),
             'statuses' => $this->fetchAll('SELECT id, code, name, color, is_closed, active FROM statuses' . $active . ' ORDER BY sort_order, name'),
             'outcomes' => $this->fetchAll('SELECT id, code, name, is_success, active FROM outcomes' . $active . ' ORDER BY sort_order, name'),
-            'users' => $this->fetchAll('SELECT id, username, display_name, role, active FROM users' . $active . ' ORDER BY display_name'),
+            'users' => $this->fetchAll("SELECT id, username, first_name, last_name, email, active,
+                TRIM(CONCAT(first_name, ' ', last_name)) AS display_name
+                FROM users" . $active . " ORDER BY last_name, first_name"),
         ];
     }
 
@@ -53,9 +55,6 @@ final class QuoteRepository
         if ((int) ($input['status_id'] ?? 0) < 1) {
             $errors['status_id'] = 'Seleziona lo stato.';
         }
-        if (($input['quote_deadline'] ?? '') === '') {
-            $errors['quote_deadline'] = 'Indica la scadenza del preventivo.';
-        }
         $probability = (int) ($input['probability'] ?? 0);
         if ($probability < 0 || $probability > 100) {
             $errors['probability'] = 'La probabilità deve essere compresa tra 0 e 100.';
@@ -70,6 +69,9 @@ final class QuoteRepository
     public function create(array $input, int $actorId): int
     {
         $data = $this->normalize($input, $actorId);
+        if (!$data['date_sent'] && $this->isSentStatus((int) $data['status_id'])) {
+            $data['date_sent'] = (new DateTimeImmutable())->format('Y-m-d H:i:s');
+        }
         $this->pdo->beginTransaction();
         try {
             $statement = $this->pdo->prepare(
@@ -82,8 +84,8 @@ final class QuoteRepository
                  ) VALUES (
                     :request_date, :request_time, :customer_name, :customer_contact, :phone, :email,
                     :channel_id, :service_id, :request_description, :received_by_user_id, :responsible_user_id,
-                    :priority_id, :status_id, :quote_deadline, :date_sent, :estimated_value, :probability,
-                    NOW(), :next_followup_at, :outcome_id, :loss_notes, :external_link, NOW(), :created_by_user_id
+                    :priority_id, :status_id, DATE_ADD(NOW(), INTERVAL 24 HOUR), :date_sent, :estimated_value, :probability,
+                    NOW(), DATE_ADD(NOW(), INTERVAL 3 DAY), :outcome_id, :loss_notes, :external_link, NOW(), :created_by_user_id
                  )'
             );
             $statement->execute($data);
@@ -94,16 +96,9 @@ final class QuoteRepository
                 ->execute(['code' => $code, 'id' => $id]);
 
             $this->addActivity($id, $actorId, 'created', 'Pratica creata.');
-            if ($data['date_sent']) {
-                $this->scheduleStandardFollowups($id, $data['date_sent'], $actorId);
-            } elseif ($data['next_followup_at']) {
-                $this->scheduleManualFollowup($id, $data['next_followup_at'], $actorId);
-            }
             if ($this->isClosedStatus((int) $data['status_id'])) {
-                $this->pdo->prepare("UPDATE followups SET status = 'skipped' WHERE quote_id = :id AND status = 'pending'")
-                    ->execute(['id' => $id]);
+                $this->pdo->prepare('UPDATE quotes SET next_followup_at = NULL WHERE id = :id')->execute(['id' => $id]);
             }
-            $this->syncNextFollowup($id);
             $this->pdo->commit();
             return $id;
         } catch (Throwable $exception) {
@@ -119,6 +114,9 @@ final class QuoteRepository
             throw new RuntimeException('Pratica non trovata.');
         }
         $data = $this->normalize($input, $actorId);
+        if (!$data['date_sent'] && $this->isSentStatus((int) $data['status_id'])) {
+            $data['date_sent'] = (new DateTimeImmutable())->format('Y-m-d H:i:s');
+        }
         unset($data['created_by_user_id']);
         $data['id'] = $id;
         $data['status_id_check'] = $data['status_id'];
@@ -132,10 +130,11 @@ final class QuoteRepository
                     phone = :phone, email = :email, channel_id = :channel_id, service_id = :service_id,
                     request_description = :request_description, received_by_user_id = :received_by_user_id,
                     responsible_user_id = :responsible_user_id, priority_id = :priority_id,
+                    next_followup_at = IF(status_id <> :status_id_check, DATE_ADD(NOW(), INTERVAL 3 DAY), next_followup_at),
                     status_changed_at = IF(status_id <> :status_id_check, NOW(), status_changed_at),
-                    status_id = :status_id, quote_deadline = :quote_deadline, date_sent = :date_sent,
+                    status_id = :status_id, date_sent = :date_sent,
                     estimated_value = :estimated_value, probability = :probability,
-                    last_update_at = NOW(), next_followup_at = :next_followup_at,
+                    last_update_at = NOW(),
                     outcome_id = :outcome_id, loss_notes = :loss_notes, external_link = :external_link
                  WHERE id = :id'
             );
@@ -151,27 +150,25 @@ final class QuoteRepository
                     (int) $data['status_id']
                 );
             }
-            if (
-                (int) $previous['status_id'] !== (int) $data['status_id']
-                || (int) $previous['responsible_user_id'] !== (int) $data['responsible_user_id']
-            ) {
-                $this->resolveReminders($id);
+            $statusChanged = (int) $previous['status_id'] !== (int) $data['status_id'];
+            $responsibleChanged = (int) $previous['responsible_user_id'] !== (int) $data['responsible_user_id'];
+            if ($responsibleChanged) {
+                $this->resolveNotifications($id);
+            } elseif ($statusChanged) {
+                $this->resolveNotifications($id, ['stale_3d']);
             }
             $note = trim((string) ($input['activity_note'] ?? ''));
             if ($note !== '') {
                 $this->addActivity($id, $actorId, 'note', $note);
             }
             if (!$previous['date_sent'] && $data['date_sent']) {
-                $this->scheduleStandardFollowups($id, $data['date_sent'], $actorId);
-            } elseif (!$data['date_sent'] && $data['next_followup_at'] && $data['next_followup_at'] !== $previous['next_followup_at']) {
-                $this->scheduleManualFollowup($id, $data['next_followup_at'], $actorId);
+                $this->resolveNotifications($id, ['deadline_12h', 'deadline_24h']);
             }
 
             if ($this->isClosedStatus((int) $data['status_id'])) {
-                $this->pdo->prepare("UPDATE followups SET status = 'skipped' WHERE quote_id = :id AND status = 'pending'")
-                    ->execute(['id' => $id]);
+                $this->pdo->prepare('UPDATE quotes SET next_followup_at = NULL WHERE id = :id')->execute(['id' => $id]);
+                $this->resolveNotifications($id);
             }
-            $this->syncNextFollowup($id);
             $this->pdo->commit();
         } catch (Throwable $exception) {
             $this->pdo->rollBack();
@@ -189,22 +186,23 @@ final class QuoteRepository
         }
 
         $activity = $this->pdo->prepare(
-            'SELECT a.*, u.display_name, old_status.name AS old_status_name, new_status.name AS new_status_name
+            "SELECT a.*, TRIM(CONCAT(u.first_name, ' ', u.last_name)) AS display_name,
+                    old_status.name AS old_status_name, new_status.name AS new_status_name
              FROM quote_activities a
              LEFT JOIN users u ON u.id = a.user_id
              LEFT JOIN statuses old_status ON old_status.id = a.old_status_id
              LEFT JOIN statuses new_status ON new_status.id = a.new_status_id
-             WHERE a.quote_id = :id ORDER BY a.created_at DESC, a.id DESC'
+             WHERE a.quote_id = :id ORDER BY a.created_at DESC, a.id DESC"
         );
         $activity->execute(['id' => $id]);
         $quote['activities'] = $activity->fetchAll();
 
         $followups = $this->pdo->prepare(
-            'SELECT f.*, creator.display_name AS creator_name, completer.display_name AS completer_name
-             FROM followups f
-             LEFT JOIN users creator ON creator.id = f.created_by_user_id
-             LEFT JOIN users completer ON completer.id = f.completed_by_user_id
-             WHERE f.quote_id = :id ORDER BY f.due_at, f.id'
+            "SELECT n.*, st.name AS status_name
+             FROM operator_notifications n
+             LEFT JOIN statuses st ON st.id = n.status_id_snapshot
+             WHERE n.quote_id = :id AND n.notification_type = 'stale_3d'
+             ORDER BY n.due_at DESC, n.id DESC"
         );
         $followups->execute(['id' => $id]);
         $quote['followups'] = $followups->fetchAll();
@@ -239,11 +237,11 @@ final class QuoteRepository
         }
         $deadline = $filters['deadline'] ?? '';
         if ($deadline === 'overdue') {
-            $conditions[] = 'st.is_closed = 0 AND q.quote_deadline < NOW()';
+            $conditions[] = 'st.is_closed = 0 AND q.date_sent IS NULL AND q.quote_deadline < NOW()';
         } elseif ($deadline === 'today') {
-            $conditions[] = 'st.is_closed = 0 AND DATE(q.quote_deadline) = CURDATE()';
+            $conditions[] = 'st.is_closed = 0 AND q.date_sent IS NULL AND DATE(q.quote_deadline) = CURDATE()';
         } elseif ($deadline === 'week') {
-            $conditions[] = 'st.is_closed = 0 AND q.quote_deadline >= NOW() AND q.quote_deadline < DATE_ADD(CURDATE(), INTERVAL 7 DAY)';
+            $conditions[] = 'st.is_closed = 0 AND q.date_sent IS NULL AND q.quote_deadline >= NOW() AND q.quote_deadline < DATE_ADD(CURDATE(), INTERVAL 7 DAY)';
         }
 
         $where = ' WHERE ' . implode(' AND ', $conditions);
@@ -271,12 +269,12 @@ final class QuoteRepository
 
     public function dashboard(int $userId): array
     {
-        $this->generateStaleStatusReminders();
+        $this->generateNotifications();
         $metrics = $this->fetchOne(
             "SELECT
                 SUM(CASE WHEN st.is_closed = 0 THEN 1 ELSE 0 END) AS open_count,
-                SUM(CASE WHEN st.is_closed = 0 AND q.quote_deadline < NOW() THEN 1 ELSE 0 END) AS overdue_count,
-                SUM(CASE WHEN st.is_closed = 0 AND DATE(q.quote_deadline) = CURDATE() THEN 1 ELSE 0 END) AS due_today_count,
+                SUM(CASE WHEN st.is_closed = 0 AND q.date_sent IS NULL AND q.quote_deadline < NOW() THEN 1 ELSE 0 END) AS overdue_count,
+                SUM(CASE WHEN st.is_closed = 0 AND q.date_sent IS NULL AND DATE(q.quote_deadline) = CURDATE() THEN 1 ELSE 0 END) AS due_today_count,
                 SUM(CASE WHEN q.request_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN 1 ELSE 0 END) AS received_month_count,
                 SUM(CASE WHEN q.date_sent >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN 1 ELSE 0 END) AS sent_month_count,
                 SUM(CASE WHEN st.code = 'CONFIRMED' AND q.status_changed_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN 1 ELSE 0 END) AS confirmed_month_count,
@@ -295,64 +293,121 @@ final class QuoteRepository
         $metrics['conversion_rate'] = $closed > 0 ? ((int) $conversion['won'] / $closed) * 100 : 0;
 
         $workload = $this->fetchAll(
-            "SELECT u.id, u.display_name,
+            "SELECT u.id, TRIM(CONCAT(u.first_name, ' ', u.last_name)) AS display_name,
                 SUM(CASE WHEN st.is_closed = 0 AND q.archived_at IS NULL THEN 1 ELSE 0 END) AS open_count,
-                SUM(CASE WHEN st.is_closed = 0 AND q.archived_at IS NULL AND q.quote_deadline < NOW() THEN 1 ELSE 0 END) AS overdue_count,
+                SUM(CASE WHEN st.is_closed = 0 AND q.archived_at IS NULL AND q.date_sent IS NULL AND q.quote_deadline < NOW() THEN 1 ELSE 0 END) AS overdue_count,
                 COALESCE(SUM(CASE WHEN st.is_closed = 0 AND q.archived_at IS NULL THEN q.estimated_value ELSE 0 END), 0) AS open_value
              FROM users u
              LEFT JOIN quotes q ON q.responsible_user_id = u.id
              LEFT JOIN statuses st ON st.id = q.status_id
              WHERE u.active = 1
-             GROUP BY u.id, u.display_name
-             ORDER BY open_count DESC, u.display_name"
+             GROUP BY u.id, u.first_name, u.last_name
+             ORDER BY open_count DESC, u.last_name, u.first_name"
         );
 
-        $followups = $this->followups('due', 8);
-        $reminders = $this->remindersForUser($userId, 8);
+        $followups = $this->followups($userId, 8);
+        $notifications = $this->notificationsForUser($userId, 12);
         $recent = $this->fetchAll($this->baseSelect() . ' WHERE q.archived_at IS NULL ORDER BY q.created_at DESC LIMIT 8');
 
-        return compact('metrics', 'workload', 'followups', 'reminders', 'recent');
+        return compact('metrics', 'workload', 'followups', 'notifications', 'recent');
     }
 
-    public function generateStaleStatusReminders(): int
+    public function generateNotifications(): int
     {
-        $hours = max(1, min(8760, (int) config('reminders.stale_after_hours', 72)));
+        $generated = 0;
+        $this->pdo->exec(
+            "UPDATE operator_notifications n
+             JOIN quotes q ON q.id = n.quote_id
+             JOIN statuses st ON st.id = q.status_id
+             JOIN users u ON u.id = n.user_id
+             SET n.resolved_at = NOW()
+             WHERE n.resolved_at IS NULL AND (
+                q.archived_at IS NOT NULL OR st.is_closed = 1 OR u.active = 0 OR q.responsible_user_id <> n.user_id
+                OR (n.notification_type IN ('deadline_12h', 'deadline_24h') AND q.date_sent IS NOT NULL)
+                OR (n.notification_type = 'stale_3d' AND (
+                    q.status_id <> n.status_id_snapshot OR q.status_changed_at <> n.status_changed_at_snapshot
+                ))
+             )"
+        );
+
+        foreach (['deadline_12h' => 12, 'deadline_24h' => 24] as $type => $hours) {
+            $statement = $this->pdo->prepare(
+                "INSERT IGNORE INTO operator_notifications (
+                    quote_id, user_id, notification_type, sequence_number,
+                    status_id_snapshot, status_changed_at_snapshot, dedupe_key, due_at, triggered_at
+                 )
+                 SELECT q.id, q.responsible_user_id, '{$type}', 1,
+                        q.status_id, q.status_changed_at,
+                        CONCAT('{$type}:u', q.responsible_user_id),
+                        DATE_ADD(q.created_at, INTERVAL {$hours} HOUR), NOW()
+                 FROM quotes q
+                 JOIN statuses st ON st.id = q.status_id
+                 JOIN users u ON u.id = q.responsible_user_id
+                 WHERE q.archived_at IS NULL AND q.date_sent IS NULL
+                   AND st.is_closed = 0 AND u.active = 1
+                   AND q.created_at <= DATE_SUB(NOW(), INTERVAL {$hours} HOUR)"
+            );
+            $statement->execute();
+            $generated += $statement->rowCount();
+        }
+
+        $interval = 72;
+        $sequence = "FLOOR(TIMESTAMPDIFF(HOUR, q.status_changed_at, NOW()) / {$interval})";
         $statement = $this->pdo->prepare(
-            "INSERT IGNORE INTO status_reminders (
-                quote_id, user_id, status_id, status_changed_at_snapshot, triggered_at
+            "INSERT IGNORE INTO operator_notifications (
+                quote_id, user_id, notification_type, sequence_number,
+                status_id_snapshot, status_changed_at_snapshot, dedupe_key, due_at, triggered_at
              )
-             SELECT q.id, q.responsible_user_id, q.status_id, q.status_changed_at, NOW()
+             SELECT q.id, q.responsible_user_id, 'stale_3d', {$sequence},
+                    q.status_id, q.status_changed_at,
+                    CONCAT('stale:u', q.responsible_user_id, ':s', q.status_id,
+                           ':t', UNIX_TIMESTAMP(q.status_changed_at), ':n', {$sequence}),
+                    TIMESTAMPADD(HOUR, {$sequence} * {$interval}, q.status_changed_at), NOW()
              FROM quotes q
              JOIN statuses st ON st.id = q.status_id
              JOIN users u ON u.id = q.responsible_user_id
-             WHERE q.archived_at IS NULL
-               AND st.is_closed = 0
-               AND u.active = 1
-               AND q.status_changed_at <= DATE_SUB(NOW(), INTERVAL {$hours} HOUR)"
+             WHERE q.archived_at IS NULL AND st.is_closed = 0 AND u.active = 1
+               AND TIMESTAMPDIFF(HOUR, q.status_changed_at, NOW()) >= {$interval}"
         );
         $statement->execute();
-        return $statement->rowCount();
+        $generated += $statement->rowCount();
+
+        $this->pdo->exec(
+            "UPDATE quotes q
+             JOIN statuses st ON st.id = q.status_id
+             SET q.next_followup_at = TIMESTAMPADD(
+                 HOUR,
+                 (FLOOR(TIMESTAMPDIFF(HOUR, q.status_changed_at, NOW()) / {$interval}) + 1) * {$interval},
+                 q.status_changed_at
+             )
+             WHERE q.archived_at IS NULL AND st.is_closed = 0"
+        );
+
+        return $generated;
     }
 
-    public function remindersForUser(int $userId, int $limit = 20): array
+    public function notificationsForUser(int $userId, int $limit = 20): array
     {
         $limit = max(1, min(200, $limit));
         $statement = $this->pdo->prepare(
-            "SELECT r.*, q.practice_code, q.customer_name, q.status_changed_at,
+            "SELECT n.*, q.practice_code, q.customer_name, q.status_changed_at,
                     srv.name AS service_name, st.name AS status_name, st.color AS status_color,
                     TIMESTAMPDIFF(HOUR, q.status_changed_at, NOW()) AS stale_hours
-             FROM status_reminders r
-             JOIN quotes q ON q.id = r.quote_id
+             FROM operator_notifications n
+             JOIN quotes q ON q.id = n.quote_id
              JOIN services srv ON srv.id = q.service_id
              JOIN statuses st ON st.id = q.status_id
-             WHERE r.user_id = :user_id
-               AND r.acknowledged_at IS NULL
-               AND r.resolved_at IS NULL
-               AND q.archived_at IS NULL
-               AND q.responsible_user_id = r.user_id
-               AND q.status_id = r.status_id
-               AND q.status_changed_at = r.status_changed_at_snapshot
-             ORDER BY r.triggered_at ASC
+             WHERE n.user_id = :user_id
+               AND n.acknowledged_at IS NULL AND n.resolved_at IS NULL
+               AND q.archived_at IS NULL AND st.is_closed = 0
+               AND q.responsible_user_id = n.user_id
+               AND (
+                    (n.notification_type IN ('deadline_12h', 'deadline_24h') AND q.date_sent IS NULL)
+                    OR (n.notification_type = 'stale_3d'
+                        AND q.status_id = n.status_id_snapshot
+                        AND q.status_changed_at = n.status_changed_at_snapshot)
+               )
+             ORDER BY n.due_at ASC, n.id ASC
              LIMIT :limit"
         );
         $statement->bindValue(':user_id', $userId, PDO::PARAM_INT);
@@ -361,77 +416,97 @@ final class QuoteRepository
         return $statement->fetchAll();
     }
 
-    public function acknowledgeReminder(int $reminderId, int $userId): void
+    public function acknowledgeNotification(int $notificationId, int $userId): void
     {
         $statement = $this->pdo->prepare(
-            'UPDATE status_reminders
-             SET acknowledged_at = NOW()
+            'UPDATE operator_notifications
+             SET acknowledged_at = NOW(), updated_at = NOW()
              WHERE id = :id AND user_id = :user_id
                AND acknowledged_at IS NULL AND resolved_at IS NULL'
         );
-        $statement->execute(['id' => $reminderId, 'user_id' => $userId]);
+        $statement->execute(['id' => $notificationId, 'user_id' => $userId]);
         if ($statement->rowCount() !== 1) {
-            throw new RuntimeException('Reminder non trovato o già gestito.');
+            throw new RuntimeException('Notifica non trovata o già gestita.');
         }
     }
 
-    public function dispatchReminderEmails(): array
+    public function dispatchNotificationEmails(): array
     {
-        $result = ['enabled' => (bool) config('reminders.email_enabled', false), 'sent' => 0, 'failed' => 0, 'skipped' => 0];
+        $result = ['enabled' => (bool) config('notifications.email_enabled', true), 'sent' => 0, 'failed' => 0, 'skipped' => 0];
         if (!$result['enabled']) {
             return $result;
         }
 
-        $emails = (array) config('reminders.operator_emails', []);
-        $from = str_replace(["\r", "\n"], '', trim((string) config('reminders.email_from', '')));
+        $from = str_replace(["\r", "\n"], '', trim((string) config('notifications.email_from', '')));
+        $bcc = [];
+        foreach ((array) config('notifications.email_bcc', []) as $address) {
+            $address = str_replace(["\r", "\n"], '', trim((string) $address));
+            if (filter_var($address, FILTER_VALIDATE_EMAIL)) {
+                $bcc[] = $address;
+            }
+        }
+        $bcc = array_values(array_unique($bcc));
+
         $statement = $this->pdo->query(
-            "SELECT r.id, q.id AS quote_id, q.practice_code, q.customer_name, q.status_changed_at,
-                    u.username, u.display_name, st.name AS status_name
-             FROM status_reminders r
-             JOIN quotes q ON q.id = r.quote_id
-             JOIN users u ON u.id = r.user_id
-             JOIN statuses st ON st.id = r.status_id
-             WHERE r.acknowledged_at IS NULL AND r.resolved_at IS NULL
-               AND r.email_sent_at IS NULL
-               AND q.archived_at IS NULL
-               AND q.responsible_user_id = r.user_id
-               AND q.status_id = r.status_id
-               AND q.status_changed_at = r.status_changed_at_snapshot
-             ORDER BY r.triggered_at ASC"
+            "SELECT n.*, q.id AS quote_id, q.practice_code, q.customer_name,
+                    u.email AS operator_email,
+                    TRIM(CONCAT(u.first_name, ' ', u.last_name)) AS display_name,
+                    st.name AS status_name
+             FROM operator_notifications n
+             JOIN quotes q ON q.id = n.quote_id
+             JOIN users u ON u.id = n.user_id
+             JOIN statuses st ON st.id = q.status_id
+             WHERE n.resolved_at IS NULL AND n.email_sent_at IS NULL AND u.active = 1
+               AND q.archived_at IS NULL AND st.is_closed = 0
+               AND q.responsible_user_id = n.user_id
+               AND (
+                    (n.notification_type IN ('deadline_12h', 'deadline_24h') AND q.date_sent IS NULL)
+                    OR (n.notification_type = 'stale_3d'
+                        AND q.status_id = n.status_id_snapshot
+                        AND q.status_changed_at = n.status_changed_at_snapshot)
+               )
+             ORDER BY n.due_at ASC, n.id ASC"
         );
 
-        foreach ($statement->fetchAll() as $reminder) {
-            $username = mb_strtolower((string) $reminder['username']);
-            $to = trim((string) ($emails[$username] ?? $emails[$reminder['username']] ?? ''));
-            if ($to === '' && filter_var($reminder['username'], FILTER_VALIDATE_EMAIL)) {
-                $to = (string) $reminder['username'];
-            }
+        foreach ($statement->fetchAll() as $notification) {
+            $to = trim((string) $notification['operator_email']);
             if (filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
+                $this->pdo->prepare('UPDATE operator_notifications SET email_error = :error WHERE id = :id')
+                    ->execute(['error' => 'Email operatore assente o non valida.', 'id' => $notification['id']]);
                 $result['skipped']++;
                 continue;
             }
 
-            $subject = 'Reminder preventivo fermo: ' . $reminder['practice_code'];
-            $detailUrl = url('index.php', ['page' => 'quote_view', 'id' => $reminder['quote_id']]);
-            $body = "Ciao {$reminder['display_name']},\n\n"
-                . "il preventivo {$reminder['practice_code']} per {$reminder['customer_name']} "
-                . "è ancora nello stato \"{$reminder['status_name']}\" da oltre 3 giorni.\n\n"
+            [$subjectPrefix, $message] = match ($notification['notification_type']) {
+                'deadline_12h' => ['Primo alert scadenza', 'Sono trascorse 12 ore dall’inserimento e il preventivo non risulta ancora inviato.'],
+                'deadline_24h' => ['Secondo alert scadenza', 'Sono trascorse 24 ore dall’inserimento: la scadenza di invio è stata superata.'],
+                default => ['Follow-up automatico', 'Il preventivo è rimasto senza avanzamento di stato per altri 3 giorni.'],
+            };
+            $subject = $subjectPrefix . ': ' . $notification['practice_code'];
+            $detailUrl = url('index.php', ['page' => 'quote_view', 'id' => $notification['quote_id']]);
+            $body = "Ciao {$notification['display_name']},\n\n{$message}\n\n"
+                . "Pratica: {$notification['practice_code']}\n"
+                . "Cliente: {$notification['customer_name']}\n"
+                . "Stato: {$notification['status_name']}\n\n"
                 . "Apri la pratica: {$detailUrl}\n";
             $headers = ['Content-Type: text/plain; charset=UTF-8'];
             if ($from !== '' && filter_var($from, FILTER_VALIDATE_EMAIL)) {
                 $headers[] = 'From: ' . $from;
+            }
+            if ($bcc !== []) {
+                $headers[] = 'Bcc: ' . implode(', ', $bcc);
             }
 
             try {
                 if (!mail($to, $subject, $body, implode("\r\n", $headers))) {
                     throw new RuntimeException('Il server di posta ha rifiutato il messaggio.');
                 }
-                $this->pdo->prepare('UPDATE status_reminders SET email_sent_at = NOW(), email_error = NULL WHERE id = :id')
-                    ->execute(['id' => $reminder['id']]);
+                $this->pdo->prepare('UPDATE operator_notifications SET email_sent_at = NOW(), email_error = NULL, updated_at = NOW() WHERE id = :id')
+                    ->execute(['id' => $notification['id']]);
                 $result['sent']++;
             } catch (Throwable $exception) {
-                $this->pdo->prepare('UPDATE status_reminders SET email_error = :error WHERE id = :id')
-                    ->execute(['error' => mb_substr($exception->getMessage(), 0, 500), 'id' => $reminder['id']]);
+                $this->pdo->prepare('UPDATE operator_notifications SET email_error = :error, updated_at = NOW() WHERE id = :id')
+                    ->execute(['error' => mb_substr($exception->getMessage(), 0, 500), 'id' => $notification['id']]);
                 $result['failed']++;
             }
         }
@@ -439,71 +514,35 @@ final class QuoteRepository
         return $result;
     }
 
-    public function followups(string $view = 'due', int $limit = 200): array
+    public function followups(int $userId, int $limit = 200): array
     {
-        $condition = match ($view) {
-            'today' => 'DATE(f.due_at) = CURDATE()',
-            'upcoming' => 'f.due_at > NOW()',
-            'all' => '1 = 1',
-            default => 'f.due_at <= NOW()',
-        };
+        $limit = max(1, min(200, $limit));
         $statement = $this->pdo->prepare(
-            "SELECT f.*, q.practice_code, q.customer_name, q.phone, q.email,
-                    u.display_name AS responsible_name, st.name AS status_name, st.color AS status_color
-             FROM followups f
-             JOIN quotes q ON q.id = f.quote_id
+            "SELECT n.*, q.practice_code, q.customer_name, q.phone, q.email,
+                    TRIM(CONCAT(u.first_name, ' ', u.last_name)) AS responsible_name,
+                    st.name AS status_name, st.color AS status_color
+             FROM operator_notifications n
+             JOIN quotes q ON q.id = n.quote_id
              JOIN users u ON u.id = q.responsible_user_id
              JOIN statuses st ON st.id = q.status_id
-             WHERE f.status = 'pending' AND q.archived_at IS NULL AND {$condition}
-             ORDER BY f.due_at ASC LIMIT :limit"
+             WHERE n.user_id = :user_id AND n.notification_type = 'stale_3d'
+               AND n.acknowledged_at IS NULL AND n.resolved_at IS NULL
+               AND q.archived_at IS NULL AND st.is_closed = 0
+               AND q.responsible_user_id = n.user_id
+               AND q.status_id = n.status_id_snapshot
+               AND q.status_changed_at = n.status_changed_at_snapshot
+             ORDER BY n.due_at ASC LIMIT :limit"
         );
+        $statement->bindValue(':user_id', $userId, PDO::PARAM_INT);
         $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
         $statement->execute();
         return $statement->fetchAll();
     }
 
-    public function completeFollowup(int $followupId, int $actorId, string $note = ''): void
-    {
-        $statement = $this->pdo->prepare("SELECT quote_id FROM followups WHERE id = :id AND status = 'pending'");
-        $statement->execute(['id' => $followupId]);
-        $quoteId = (int) $statement->fetchColumn();
-        if ($quoteId < 1) {
-            throw new RuntimeException('Follow-up non trovato o già completato.');
-        }
-        $this->pdo->beginTransaction();
-        try {
-            $this->pdo->prepare(
-                "UPDATE followups SET status = 'done', completed_at = NOW(), completed_by_user_id = :user_id, notes = :notes WHERE id = :id"
-            )->execute(['user_id' => $actorId, 'notes' => trim($note) ?: null, 'id' => $followupId]);
-            $this->addActivity($quoteId, $actorId, 'followup', trim($note) ?: 'Follow-up completato.');
-            $this->syncNextFollowup($quoteId);
-            $this->pdo->commit();
-        } catch (Throwable $exception) {
-            $this->pdo->rollBack();
-            throw $exception;
-        }
-    }
-
-    public function postponeFollowup(int $followupId, int $days, int $actorId): void
-    {
-        $days = max(1, min(30, $days));
-        $statement = $this->pdo->prepare("SELECT quote_id, due_at FROM followups WHERE id = :id AND status = 'pending'");
-        $statement->execute(['id' => $followupId]);
-        $followup = $statement->fetch();
-        if (!$followup) {
-            throw new RuntimeException('Follow-up non trovato o già completato.');
-        }
-        $dueAt = (new DateTimeImmutable($followup['due_at']))->modify('+' . $days . ' days')->format('Y-m-d H:i:s');
-        $this->pdo->prepare('UPDATE followups SET due_at = :due_at WHERE id = :id')
-            ->execute(['due_at' => $dueAt, 'id' => $followupId]);
-        $this->addActivity((int) $followup['quote_id'], $actorId, 'followup', "Follow-up posticipato di {$days} giorni.");
-        $this->syncNextFollowup((int) $followup['quote_id']);
-    }
-
     public function archive(int $quoteId, int $actorId): void
     {
         $this->pdo->prepare('UPDATE quotes SET archived_at = NOW() WHERE id = :id')->execute(['id' => $quoteId]);
-        $this->resolveReminders($quoteId);
+        $this->resolveNotifications($quoteId);
         $this->addActivity($quoteId, $actorId, 'archive', 'Pratica archiviata.');
     }
 
@@ -546,11 +585,9 @@ final class QuoteRepository
             'responsible_user_id' => (int) $input['responsible_user_id'],
             'priority_id' => (int) $input['priority_id'],
             'status_id' => (int) $input['status_id'],
-            'quote_deadline' => $this->dateTime($input['quote_deadline']),
             'date_sent' => $this->dateTime($input['date_sent'] ?? null),
             'estimated_value' => max(0, (float) str_replace(',', '.', (string) ($input['estimated_value'] ?? 0))),
             'probability' => max(0, min(100, (int) ($input['probability'] ?? 0))),
-            'next_followup_at' => $this->dateTime($input['next_followup_at'] ?? null),
             'outcome_id' => $this->nullableInt($input['outcome_id'] ?? null),
             'loss_notes' => $this->nullable($input['loss_notes'] ?? null, 10000),
             'external_link' => $this->nullable($input['external_link'] ?? null, 500),
@@ -564,14 +601,15 @@ final class QuoteRepository
                     p.name AS priority_name, p.color AS priority_color,
                     st.code AS status_code, st.name AS status_name, st.color AS status_color, st.is_closed,
                     outc.name AS outcome_name,
-                    responsible.display_name AS responsible_name, receiver.display_name AS received_by_name,
+                    TRIM(CONCAT(responsible.first_name, ' ', responsible.last_name)) AS responsible_name,
+                    TRIM(CONCAT(receiver.first_name, ' ', receiver.last_name)) AS received_by_name,
                     DATEDIFF(COALESCE(q.date_sent, NOW()), q.request_date) AS days_open,
                     q.estimated_value * q.probability / 100 AS weighted_value,
                     CASE
                         WHEN st.is_closed = 1 THEN 'CHIUSO'
-                        WHEN q.quote_deadline < NOW() THEN 'SCADUTO'
-                        WHEN DATE(q.quote_deadline) = CURDATE() THEN 'OGGI'
-                        ELSE 'NEI TEMPI'
+                        WHEN COALESCE(q.date_sent, NOW()) <= q.quote_deadline THEN 'NEI TEMPI'
+                        WHEN COALESCE(q.date_sent, NOW()) < DATE_ADD(q.quote_deadline, INTERVAL 24 HOUR) THEN 'SCADUTO_24'
+                        ELSE 'SCADUTO_48'
                     END AS traffic_light
              FROM quotes q
              JOIN services srv ON srv.id = q.service_id
@@ -590,53 +628,22 @@ final class QuoteRepository
         return $statement->fetch() ?: null;
     }
 
-    private function scheduleStandardFollowups(int $quoteId, string $dateSent, int $actorId): void
+    private function resolveNotifications(int $quoteId, ?array $types = null): void
     {
-        $sent = new DateTimeImmutable($dateSent);
-        $statement = $this->pdo->prepare(
-            "INSERT IGNORE INTO followups (quote_id, sequence_number, due_at, status, created_by_user_id)
-             VALUES (:quote_id, :sequence_number, :due_at, 'pending', :created_by)"
-        );
-        foreach ([1 => 3, 2 => 7, 3 => 15] as $sequence => $days) {
-            $statement->execute([
-                'quote_id' => $quoteId,
-                'sequence_number' => $sequence,
-                'due_at' => $sent->modify('+' . $days . ' days')->format('Y-m-d H:i:s'),
-                'created_by' => $actorId,
-            ]);
+        $sql = 'UPDATE operator_notifications
+                SET resolved_at = NOW(), updated_at = NOW()
+                WHERE quote_id = :quote_id AND resolved_at IS NULL';
+        $params = ['quote_id' => $quoteId];
+        if ($types !== null && $types !== []) {
+            $placeholders = [];
+            foreach (array_values($types) as $index => $type) {
+                $key = 'type_' . $index;
+                $placeholders[] = ':' . $key;
+                $params[$key] = $type;
+            }
+            $sql .= ' AND notification_type IN (' . implode(', ', $placeholders) . ')';
         }
-    }
-
-    private function scheduleManualFollowup(int $quoteId, string $dueAt, int $actorId): void
-    {
-        $sequence = (int) $this->scalar('SELECT COALESCE(MAX(sequence_number), 99) + 1 FROM followups WHERE quote_id = ' . $quoteId);
-        $statement = $this->pdo->prepare(
-            "INSERT INTO followups (quote_id, sequence_number, due_at, status, created_by_user_id)
-             VALUES (:quote_id, :sequence_number, :due_at, 'pending', :created_by)"
-        );
-        $statement->execute([
-            'quote_id' => $quoteId,
-            'sequence_number' => $sequence,
-            'due_at' => $dueAt,
-            'created_by' => $actorId,
-        ]);
-    }
-
-    private function syncNextFollowup(int $quoteId): void
-    {
-        $statement = $this->pdo->prepare(
-            "UPDATE quotes SET next_followup_at = (
-                SELECT MIN(due_at) FROM followups WHERE quote_id = :source_id AND status = 'pending'
-             ) WHERE id = :target_id"
-        );
-        $statement->execute(['source_id' => $quoteId, 'target_id' => $quoteId]);
-    }
-
-    private function resolveReminders(int $quoteId): void
-    {
-        $this->pdo->prepare(
-            'UPDATE status_reminders SET resolved_at = NOW() WHERE quote_id = :quote_id AND resolved_at IS NULL'
-        )->execute(['quote_id' => $quoteId]);
+        $this->pdo->prepare($sql)->execute($params);
     }
 
     private function addActivity(
@@ -664,6 +671,13 @@ final class QuoteRepository
     private function isClosedStatus(int $statusId): bool
     {
         $statement = $this->pdo->prepare('SELECT is_closed FROM statuses WHERE id = :id');
+        $statement->execute(['id' => $statusId]);
+        return (bool) $statement->fetchColumn();
+    }
+
+    private function isSentStatus(int $statusId): bool
+    {
+        $statement = $this->pdo->prepare("SELECT code = 'SENT' FROM statuses WHERE id = :id");
         $statement->execute(['id' => $statusId]);
         return (bool) $statement->fetchColumn();
     }

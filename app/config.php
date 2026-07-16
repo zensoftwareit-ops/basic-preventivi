@@ -25,11 +25,10 @@ $config = [
         'password' => env_value('DB_PASSWORD', ''),
         'charset' => 'utf8mb4',
     ],
-    'reminders' => [
-        'stale_after_hours' => (int) env_value('REMINDER_STALE_AFTER_HOURS', '72'),
-        'email_enabled' => env_value('REMINDER_EMAIL_ENABLED', '0') === '1',
-        'email_from' => env_value('REMINDER_EMAIL_FROM', ''),
-        'operator_emails' => [],
+    'notifications' => [
+        'email_enabled' => env_value('NOTIFICATION_EMAIL_ENABLED', '1') === '1',
+        'email_from' => env_value('NOTIFICATION_EMAIL_FROM', ''),
+        'email_bcc' => [],
     ],
 ];
 

@@ -1,98 +1,87 @@
 # Basic – Gestione Preventivi
 
-Applicazione web PHP + MySQL per registrare, assegnare e seguire i preventivi Basic. Non usa Docker, Composer, npm o servizi esterni.
+Applicazione PHP + MySQL per registrare, assegnare e seguire i preventivi Basic. Non usa Docker, Composer o npm.
 
 Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 
-## Funzioni principali
+## Regole operative
 
-- accesso SSO senza form: il **token condiviso è l’unica credenziale**;
-- il parametro `operator` identifica chi sta lavorando, ma non concede permessi;
-- numero pratica automatico (`BAS-2026-000001`);
-- registro preventivi con stati, responsabili, priorità, scadenze e semaforo;
-- dashboard con carico, ritardi, valore e conversione;
-- follow-up automatici a 3, 7 e 15 giorni dall’invio;
-- reminder personale dopo 72 ore senza cambio di stato;
-- email di reminder opzionali;
-- cronologia, archiviazione e liste configurabili;
-- interfaccia responsive senza dipendenze front-end esterne.
+- SSO senza form con `id` utente e token condiviso;
+- l’utente deve esistere nella tabella `users` ed essere attivo;
+- scadenza di invio non modificabile, fissata a 24 ore dalla creazione della pratica;
+- primo alert interno ed email dopo 12 ore se il preventivo non risulta inviato;
+- secondo alert interno ed email dopo 24 ore se il preventivo non risulta inviato;
+- follow-up interno ed email ogni 3 giorni di stato invariato;
+- il conteggio dei 3 giorni riparte da zero a ogni cambio di stato;
+- email inviata all’indirizzo dell’operatore presente in `users.email`;
+- una o più copie nascoste BCC configurabili in `app/config.local.php`;
+- semaforo scadenza: verde entro 24 ore, giallo tra 24 e 48 ore dalla creazione, rosso oltre 48 ore;
+- follow-up e scadenze non possono essere posticipati o modificati dall’interfaccia.
 
 ## Requisiti
 
-- Plesk Obsidian con estensione **Git**;
+- Plesk Obsidian con estensione Git;
 - PHP 8.2 o successivo;
 - estensioni PHP `pdo_mysql` e `mbstring`;
-- MySQL 5.5.3 o successivo, oppure una versione MariaDB compatibile;
-- certificato HTTPS attivo sul sottodominio.
+- MySQL 5.5.3 o successivo oppure MariaDB compatibile;
+- HTTPS attivo sul sottodominio;
+- posta in uscita configurata sul server per usare `mail()` di PHP.
 
-## Installazione in Plesk, passo per passo
+## Installazione nuova in Plesk
 
-Negli esempi:
+### 1. Sottodominio e Git
 
-- `preventivi.example.it` è il sottodominio da sostituire;
-- `<APP_ROOT>` è la cartella in cui Plesk pubblica il repository;
-- la document root del sottodominio deve essere sempre `<APP_ROOT>/public`.
-
-### 1. Creare il sottodominio
-
-1. Aprire **Siti web e domini** in Plesk.
-2. Fare clic su **Aggiungi sottodominio**.
-3. Inserire il nome desiderato, per esempio `preventivi`.
-4. Annotare la cartella proposta da Plesk: servirà nel passaggio Git.
-5. Attivare un certificato Let’s Encrypt e il reindirizzamento permanente da HTTP a HTTPS.
-
-### 2. Collegare il repository GitHub
-
-1. Nel sottodominio aprire **Git**. Se la voce non esiste, installare o abilitare l’estensione Git di Plesk.
-2. Fare clic su **Aggiungi repository**.
+1. In **Siti web e domini** creare il sottodominio, per esempio `preventivi.example.it`.
+2. Aprire **Git → Aggiungi repository**.
 3. Scegliere **Hosting Git remoto**.
-4. Incollare questo URL:
+4. Usare:
 
    ```text
    https://github.com/zensoftwareit-ops/basic-preventivi.git
    ```
 
-5. Selezionare il branch `main`.
-6. Impostare **Distribuzione manuale**.
-7. Come percorso di distribuzione scegliere `<APP_ROOT>`, cioè la cartella che deve contenere `app`, `bin`, `database` e `public`. Non scegliere direttamente la cartella `public`.
-8. Salvare, quindi fare clic su **Pull Updates** e infine su **Deploy from Repository**.
+5. Selezionare il branch `main` e la distribuzione manuale.
+6. Distribuire il progetto in una cartella `<APP_ROOT>` che contenga `app`, `bin`, `database` e `public`.
+7. Premere **Pull Updates** e **Deploy from Repository**.
 
-Il repository è pubblico, quindi al momento Plesk non richiede credenziali GitHub.
+### 2. Document root e PHP
 
-### 3. Impostare la document root corretta
-
-1. Aprire **Siti web e domini → Impostazioni di hosting** del sottodominio.
-2. Nel campo **Document root** indicare la sottocartella `public` del progetto: `<APP_ROOT>/public`.
-3. Salvare.
-4. Controllare con File Manager che nella document root siano visibili `index.php`, `sso.php`, `health.php` e `assets`.
-
-La cartella `app` e il file di configurazione devono restare un livello sopra la document root e non devono essere pubblicamente scaricabili.
-
-### 4. Selezionare PHP
-
-1. Aprire **Siti web e domini → PHP**.
+1. In **Impostazioni di hosting** impostare la document root su `<APP_ROOT>/public`.
 2. Selezionare PHP 8.2 o 8.3.
-3. Verificare che `pdo_mysql` e `mbstring` siano attive.
-4. Lasciare `display_errors` disattivato in produzione.
+3. Verificare che `pdo_mysql` e `mbstring` siano abilitate.
+4. Attivare HTTPS e il reindirizzamento da HTTP a HTTPS.
 
-### 5. Creare e inizializzare il database
+### 3. Database
 
-1. Aprire **Siti web e domini → Database → Aggiungi database**.
-2. Creare un database MySQL/MariaDB e un utente dedicato.
-3. Conservare nome database, host, nome utente e password.
-4. Aprire **phpMyAdmin** per quel database.
-5. In File Manager scaricare dal progetto il file `database/schema.sql`, oppure scaricarlo dal repository GitHub.
-6. In phpMyAdmin aprire **Importa**, scegliere `schema.sql` e avviare l’importazione.
+1. In **Siti web e domini → Database** creare un database MySQL/MariaDB e un utente dedicato.
+2. Aprire phpMyAdmin.
+3. Importare `database/schema.sql`.
+4. Se un tentativo precedente è terminato con l’errore MySQL `#1293`, eliminare le tabelle create parzialmente prima di ripetere l’importazione.
 
-Se un precedente tentativo si è interrotto con l’errore MySQL `#1293`, eliminare le eventuali tabelle create parzialmente e importare di nuovo il file `database/schema.sql` aggiornato. Lo schema usa una sola colonna `TIMESTAMP` automatica per tabella ed è compatibile anche con i server Plesk meno recenti.
+### 4. Creare il primo operatore
 
-Per un’installazione già esistente, non reimportare tutto lo schema: eseguire soltanto `database/migrations/20260716_add_status_reminders.sql`.
+L’SSO non crea automaticamente gli utenti. In phpMyAdmin aprire la tabella `users`, scegliere **Inserisci** e compilare:
 
-### 6. Creare la configurazione privata
+- `id`: lasciare vuoto, viene assegnato automaticamente;
+- `username`: identificativo interno dell’operatore;
+- `first_name`: nome;
+- `last_name`: cognome;
+- `email`: indirizzo che riceverà alert e follow-up;
+- `active`: `1` per attivo, `0` per disattivo.
 
-1. In **File Manager** aprire `<APP_ROOT>/app`.
-2. Copiare `config.local.example.php` con il nome `config.local.php`.
-3. Modificare esclusivamente `config.local.php`:
+Annotare l’`id` assegnato: sarà il valore passato a `sso.php`.
+
+Esempio SQL equivalente:
+
+```sql
+INSERT INTO users (username, first_name, last_name, email, active)
+VALUES ('mario.rossi', 'Mario', 'Rossi', 'mario.rossi@example.it', 1);
+```
+
+### 5. Configurazione privata
+
+1. Copiare `app/config.local.example.php` in `app/config.local.php`.
+2. Modificare il nuovo file:
 
    ```php
    <?php
@@ -112,118 +101,101 @@ Per un’installazione già esistente, non reimportare tutto lo schema: eseguire
            'user' => 'UTENTE_DATABASE_PLESK',
            'password' => 'PASSWORD_DATABASE_PLESK',
        ],
-       'reminders' => [
-           'stale_after_hours' => 72,
-           'email_enabled' => false,
+       'notifications' => [
+           'email_enabled' => true,
            'email_from' => 'preventivi@example.it',
-           'operator_emails' => [],
+           'email_bcc' => [
+               'responsabile@example.it',
+               'direzione@example.it',
+           ],
        ],
    ];
    ```
 
-`app/config.local.php` è escluso da Git: password e token non vengono pubblicati e il file rimane separato dagli aggiornamenti del repository.
+`app/config.local.php` è escluso da Git. Non inserire token o password nei file versionati.
 
-### 7. Attivare il controllo reminder
+### 6. Attività pianificata
 
-Il reminder viene comunque creato quando l’operatore apre la dashboard. L’attività pianificata serve per generarlo puntualmente e, se abilitate, inviare le email.
+Gli alert compaiono anche quando viene aperta la dashboard, ma l’attività pianificata è necessaria per generarli puntualmente e inviare le email.
 
-1. Aprire **Attività pianificate** del dominio. Come amministratore Plesk la stessa funzione è disponibile anche in **Strumenti e impostazioni → Attività pianificate**.
-2. Fare clic su **Aggiungi attività**.
-3. Scegliere **Esegui uno script PHP**.
-4. Selezionare la stessa versione PHP usata dal sito.
-5. Indicare il percorso completo:
+1. Aprire **Attività pianificate → Aggiungi attività**.
+2. Scegliere **Esegui uno script PHP**.
+3. Selezionare la stessa versione PHP del sito.
+4. Indicare:
 
    ```text
-   <APP_ROOT>/bin/check_stale_reminders.php
+   <APP_ROOT>/bin/check_notifications.php
    ```
 
-6. Impostare l’esecuzione **ogni ora**, per esempio al minuto `10`.
-7. Salvare e usare **Esegui ora**: il risultato deve contenere `"ok": true`.
+5. Programmare l’esecuzione ogni 5 minuti.
+6. Usare **Esegui ora**: l’output deve contenere `"ok": true`.
 
-Se Plesk offre soltanto “Esegui un comando”, su Linux usare il binario PHP della versione scelta:
+Se è disponibile solo “Esegui un comando” su Plesk Linux:
 
 ```text
-/opt/plesk/php/8.3/bin/php <APP_ROOT>/bin/check_stale_reminders.php
+/opt/plesk/php/8.3/bin/php <APP_ROOT>/bin/check_notifications.php
 ```
 
-### 8. Verificare l’applicazione
+### 7. Verifica
 
 1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok`.
-2. Provare il collegamento SSO descritto sotto.
-3. Creare una pratica di prova e verificare dashboard, modifica e follow-up.
+2. Eseguire un accesso SSO usando l’ID del primo operatore.
+3. Creare una pratica e verificare che la scadenza mostrata sia 24 ore dopo la creazione.
 
-## Servizio SSO senza form
+## SSO senza username
 
-Endpoint preferito:
+Endpoint:
 
 ```text
-GET /sso.php?operator=<operatore>&token=<token-condiviso>
+GET /sso.php?id=<id-utente>&token=<token-condiviso>
 ```
 
 Esempio:
 
 ```text
-https://preventivi.example.it/sso.php?operator=marco.rossi&token=TOKEN_CONDIVISO
+https://preventivi.example.it/sso.php?id=12&token=TOKEN_CONDIVISO
 ```
 
-Il sistema controlla **solo il token**. `operator` serve a creare o riconoscere l’operatore, assegnargli le pratiche e mostrargli i reminder. Per compatibilità è accettato anche il vecchio parametro `username`, ma non viene usato per autorizzare l’accesso.
+Il token è l’unica credenziale condivisa. L’`id` serve esclusivamente a individuare l’operatore nella tabella `users`. L’accesso fallisce se l’utente non esiste o ha `active = 0`.
 
-Se il token è valido, il servizio crea o aggiorna l’operatore, apre la sessione, registra l’evento e reindirizza con risposta `303` alla dashboard. Il software chiamante deve far navigare il browser dell’utente verso l’endpoint; una richiesta eseguita soltanto dal proprio backend non trasferisce il cookie al browser.
-
-### POST consigliato
-
-Il GET è supportato, ma può lasciare il token nei log o nella cronologia. È preferibile un form POST auto-inviato:
+POST consigliato:
 
 ```html
 <form id="basic-sso" method="post" action="https://preventivi.example.it/sso.php">
-  <input type="hidden" name="operator" value="marco.rossi">
+  <input type="hidden" name="id" value="12">
   <input type="hidden" name="token" value="TOKEN_CONDIVISO">
 </form>
 <script>document.getElementById('basic-sso').submit()</script>
 ```
 
-È supportato anche l’header `Authorization: Bearer <token>`, mantenendo `operator` come parametro.
+È supportato anche `Authorization: Bearer <token>`, mantenendo `id` come parametro. Il software chiamante deve far navigare il browser dell’utente verso `sso.php`, altrimenti il cookie di sessione non raggiunge il browser.
 
-> Il token unico per tutti è stato implementato come richiesto, ma chiunque lo conosca può entrare indicando un operatore arbitrario. Va trattato come una password e cambiato se viene esposto.
+## Aggiornamento di un database esistente
 
-## Reminder dopo tre giorni
+1. Eseguire Pull e deploy del nuovo codice.
+2. Fare un backup del database.
+3. Importare una sola volta:
 
-- una pratica aperta senza cambio stato per 72 ore genera un reminder per il responsabile corrente;
-- il reminder compare nella dashboard personale;
-- “Presa in carico” lo nasconde senza cambiare lo stato del preventivo;
-- un cambio di stato, un cambio di responsabile o l’archiviazione risolve il reminder;
-- per ogni fase invariata viene generato un solo reminder, quindi l’attività oraria non crea duplicati.
+   ```text
+   database/migrations/20260716_users_sso_and_notifications.sql
+   ```
 
-Per abilitare anche le email, modificare `config.local.php`:
+4. La migration converte la precedente tabella utenti e crea `operator_notifications`.
+5. Aggiornare manualmente tutte le email provvisorie `@example.invalid` con gli indirizzi reali degli operatori.
+6. Aggiornare il software chiamante affinché passi `id` invece di `operator` o `username`.
 
-```php
-'reminders' => [
-    'stale_after_hours' => 72,
-    'email_enabled' => true,
-    'email_from' => 'preventivi@example.it',
-    'operator_emails' => [
-        'marco.rossi' => 'marco.rossi@example.it',
-        'anna.bianchi' => 'anna.bianchi@example.it',
-    ],
-],
-```
-
-L’invio usa la funzione `mail()` di PHP e richiede che la posta in uscita del server Plesk sia configurata.
-
-## Aggiornamenti futuri da GitHub
+## Aggiornamenti futuri
 
 1. Aprire **Siti web e domini → Git**.
-2. Fare clic su **Pull Updates**.
+2. Premere **Pull Updates**.
 3. Controllare il commit ricevuto.
-4. Fare clic su **Deploy from Repository**.
-5. Se nelle note di rilascio è indicata una nuova migration SQL, importarla nel database.
-6. Verificare `health.php` e un accesso SSO.
-
-Database e `app/config.local.php` non vengono salvati nel repository e non devono essere sostituiti durante il deploy.
+4. Premere **Deploy from Repository**.
+5. Importare eventuali nuove migration indicate nelle note di rilascio.
+6. Verificare `health.php`, SSO e l’attività pianificata.
 
 ## Riferimenti Plesk
 
-- [Supporto Git e pulsante Pull Updates](https://docs.plesk.com/en-US/obsidian/administrator-guide/website-management/git-support.75824/)
-- [Modifica della document root](https://docs.plesk.com/en-US/obsidian/quick-start-guide/plesk-functionality-explained/managing-web-hosting.74401/)
-- [Importazione dei dump database](https://docs.plesk.com/en-US/obsidian/administrator-guide/website-management/website-databases/exporting-and-importing-database-dumps.69538/)
-- [Attività pianificate e script PHP](https://docs.plesk.com/en-US/obsidian/administrator-guide/server-administration/scheduling-tasks.64993/)
+- [Supporto Git](https://docs.plesk.com/en-US/obsidian/administrator-guide/website-management/git-support.75824/)
+- [Document root e impostazioni PHP](https://docs.plesk.com/en-US/obsidian/quick-start-guide/plesk-functionality-explained/managing-web-hosting.74401/)
+- [Importazione database](https://docs.plesk.com/en-US/obsidian/administrator-guide/website-management/website-databases/exporting-and-importing-database-dumps.69538/)
+- [Attività pianificate](https://docs.plesk.com/en-US/obsidian/administrator-guide/server-administration/scheduling-tasks.64993/)

@@ -3,13 +3,15 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(100) NOT NULL UNIQUE,
-    display_name VARCHAR(140) NOT NULL,
-    role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
+    first_name VARCHAR(80) NOT NULL,
+    last_name VARCHAR(80) NOT NULL,
+    email VARCHAR(180) NOT NULL,
     active TINYINT(1) NOT NULL DEFAULT 1,
     last_login_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NULL,
-    INDEX idx_users_active (active)
+    INDEX idx_users_active (active),
+    INDEX idx_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS services (
@@ -115,31 +117,16 @@ CREATE TABLE IF NOT EXISTS quote_activities (
     INDEX idx_activities_quote (quote_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS followups (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    quote_id BIGINT UNSIGNED NOT NULL,
-    sequence_number INT NOT NULL,
-    due_at DATETIME NOT NULL,
-    status ENUM('pending', 'done', 'skipped') NOT NULL DEFAULT 'pending',
-    completed_at DATETIME NULL,
-    notes TEXT NULL,
-    created_by_user_id BIGINT UNSIGNED NULL,
-    completed_by_user_id BIGINT UNSIGNED NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NULL,
-    CONSTRAINT fk_followups_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
-    CONSTRAINT fk_followups_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
-    CONSTRAINT fk_followups_completer FOREIGN KEY (completed_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
-    UNIQUE KEY uq_followup_sequence (quote_id, sequence_number),
-    INDEX idx_followups_queue (status, due_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS status_reminders (
+CREATE TABLE IF NOT EXISTS operator_notifications (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     quote_id BIGINT UNSIGNED NOT NULL,
     user_id BIGINT UNSIGNED NOT NULL,
-    status_id BIGINT UNSIGNED NOT NULL,
-    status_changed_at_snapshot DATETIME NOT NULL,
+    notification_type VARCHAR(30) NOT NULL,
+    sequence_number INT NOT NULL DEFAULT 1,
+    status_id_snapshot BIGINT UNSIGNED NULL,
+    status_changed_at_snapshot DATETIME NULL,
+    dedupe_key VARCHAR(180) NOT NULL,
+    due_at DATETIME NOT NULL,
     triggered_at DATETIME NOT NULL,
     acknowledged_at DATETIME NULL,
     resolved_at DATETIME NULL,
@@ -147,25 +134,26 @@ CREATE TABLE IF NOT EXISTS status_reminders (
     email_error VARCHAR(500) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NULL,
-    CONSTRAINT fk_status_reminders_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
-    CONSTRAINT fk_status_reminders_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT fk_status_reminders_status FOREIGN KEY (status_id) REFERENCES statuses(id),
-    UNIQUE KEY uq_status_reminder_phase (quote_id, user_id, status_id, status_changed_at_snapshot),
-    INDEX idx_status_reminders_queue (user_id, acknowledged_at, resolved_at),
-    INDEX idx_status_reminders_email (email_sent_at, resolved_at)
+    CONSTRAINT fk_notifications_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_notifications_status FOREIGN KEY (status_id_snapshot) REFERENCES statuses(id) ON DELETE SET NULL,
+    UNIQUE KEY uq_notification_dedupe (quote_id, dedupe_key),
+    INDEX idx_notifications_queue (user_id, acknowledged_at, resolved_at),
+    INDEX idx_notifications_email (email_sent_at, resolved_at),
+    INDEX idx_notifications_type_due (notification_type, due_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS auth_events (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT UNSIGNED NULL,
-    username_attempted VARCHAR(100) NOT NULL,
+    user_id_attempted BIGINT UNSIGNED NOT NULL,
     successful TINYINT(1) NOT NULL,
     ip_address VARCHAR(45) NULL,
     user_agent VARCHAR(255) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_auth_events_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_auth_events_created (created_at),
-    INDEX idx_auth_events_username (username_attempted, created_at)
+    INDEX idx_auth_events_user_attempted (user_id_attempted, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO services (name, sort_order) VALUES

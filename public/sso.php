@@ -6,7 +6,7 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 if (isset($_GET['error'])) {
     http_response_code(401);
-    render_public_error('Accesso non autorizzato', 'Il token condiviso non è valido.');
+    render_public_error('Accesso non autorizzato', 'Token non valido oppure utente inesistente o disattivato.');
     exit;
 }
 
@@ -16,12 +16,12 @@ if ((string) config('app.shared_token', '') === '') {
     exit;
 }
 
-$operator = (string) ($_POST['operator'] ?? $_GET['operator'] ?? $_POST['username'] ?? $_GET['username'] ?? '');
+$userId = (int) ($_POST['id'] ?? $_GET['id'] ?? $_POST['user_id'] ?? $_GET['user_id'] ?? 0);
 $token = (string) ($_POST['token'] ?? $_GET['token'] ?? '');
 
-if (trim($operator) === '') {
+if ($userId < 1) {
     http_response_code(422);
-    render_public_error('Operatore mancante', 'Passa il parametro operator per identificare chi sta usando l’applicazione.');
+    render_public_error('Utente mancante', 'Passa il parametro id dell’utente che sta usando l’applicazione.');
     exit;
 }
 
@@ -30,12 +30,12 @@ if ($token === '' && isset($_SERVER['HTTP_AUTHORIZATION']) && str_starts_with($_
 }
 
 try {
-    if (!Auth::attemptBridgeLogin($operator, $token)) {
+    if (!Auth::attemptBridgeLogin($userId, $token)) {
         if ($_SERVER['REQUEST_METHOD'] === 'GET' && $token !== '') {
             redirect(url('sso.php', ['error' => 'unauthorized']));
         }
         http_response_code(401);
-        render_public_error('Accesso non autorizzato', 'Il token condiviso non è valido.');
+        render_public_error('Accesso non autorizzato', 'Token non valido oppure utente inesistente o disattivato.');
         exit;
     }
     redirect(url('index.php'));

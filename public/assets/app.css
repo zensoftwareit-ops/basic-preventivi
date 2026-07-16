@@ -144,9 +144,10 @@ td small { margin-top: 4px; color: #8b94a5; font-size: 10px; }
 .status-pill::before { width: 6px; height: 6px; border-radius: 50%; background: var(--pill-color); content: ""; }
 .traffic { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 750; white-space: nowrap; }
 .traffic i { width: 7px; height: 7px; border-radius: 50%; background: #7d8798; }
-.traffic.scaduto { color: var(--red); } .traffic.scaduto i { background: var(--red); box-shadow: 0 0 0 3px #fdebed; }
-.traffic.oggi { color: var(--amber); } .traffic.oggi i { background: var(--amber); box-shadow: 0 0 0 3px #fff1dc; }
+.traffic.scaduto-24 { color: var(--amber); } .traffic.scaduto-24 i { background: var(--amber); box-shadow: 0 0 0 3px #fff1dc; }
+.traffic.scaduto-48 { color: var(--red); } .traffic.scaduto-48 i { background: var(--red); box-shadow: 0 0 0 3px #fdebed; }
 .traffic.nei-tempi { color: var(--green); } .traffic.nei-tempi i { background: var(--green); box-shadow: 0 0 0 3px #e4f5ed; }
+.traffic.chiuso { color: #7d8798; }
 
 .stack-list { display: grid; }
 .stack-item { min-height: 67px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
