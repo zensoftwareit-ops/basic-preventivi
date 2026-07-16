@@ -141,9 +141,14 @@ function render_quotes(array $result, array $filters, array $master): void
 
 function render_quotes_table(array $quotes, bool $full): void
 {
+    $canDelete = $full && Auth::isAdmin();
     echo '<div class="table-wrap"><table class="quotes-table"><thead><tr><th>Pratica</th><th>Cliente / servizio</th><th>Responsabile</th><th>Stato</th><th>Scadenza</th><th>Valore</th><th></th></tr></thead><tbody>';
     foreach ($quotes as $quote) {
-        echo '<tr><td><a class="strong-link" href="' . e(url('index.php', ['page' => 'quote_view', 'id' => $quote['id']])) . '">' . e($quote['practice_code'] ?: 'In creazione') . '</a><small>' . e(date_it($quote['request_date'])) . '</small></td><td><strong>' . e($quote['customer_name']) . '</strong><small>' . e($quote['service_name']) . '</small></td><td>' . e($quote['responsible_name']) . '</td><td>' . status_badge($quote['status_name'], $quote['status_color']) . '</td><td>' . traffic_badge($quote['traffic_light']) . '<small>' . e(date_it($quote['quote_deadline'], true)) . '</small></td><td><strong>' . e(money($quote['estimated_value'])) . '</strong><small>Pond. ' . e(money($quote['weighted_value'])) . '</small></td><td><a class="icon-button" href="' . e(url('index.php', ['page' => 'quote_edit', 'id' => $quote['id']])) . '" aria-label="Modifica">Modifica</a></td></tr>';
+        echo '<tr><td><a class="strong-link" href="' . e(url('index.php', ['page' => 'quote_view', 'id' => $quote['id']])) . '">' . e($quote['practice_code'] ?: 'In creazione') . '</a><small>' . e(date_it($quote['request_date'])) . '</small></td><td><strong>' . e($quote['customer_name']) . '</strong><small>' . e($quote['service_name']) . '</small></td><td>' . e($quote['responsible_name']) . '</td><td>' . status_badge($quote['status_name'], $quote['status_color']) . '</td><td>' . traffic_badge($quote['traffic_light']) . '<small>' . e(date_it($quote['quote_deadline'], true)) . '</small></td><td><strong>' . e(money($quote['estimated_value'])) . '</strong><small>Pond. ' . e(money($quote['weighted_value'])) . '</small></td><td><div class="table-actions"><a class="icon-button" href="' . e(url('index.php', ['page' => 'quote_edit', 'id' => $quote['id']])) . '" aria-label="Modifica">Modifica</a>';
+        if ($canDelete) {
+            echo '<form method="post" action="index.php" data-confirm="Eliminare definitivamente questo preventivo? L’operazione non può essere annullata."><input type="hidden" name="action" value="delete_quote"><input type="hidden" name="id" value="' . (int) $quote['id'] . '">' . csrf_field() . '<button class="table-delete-button" type="submit">Elimina</button></form>';
+        }
+        echo '</div></td></tr>';
     }
     if ($quotes === []) {
         echo '<tr><td colspan="7"><div class="empty-state"><strong>Nessuna pratica trovata</strong><span>Modifica i filtri o registra una nuova richiesta.</span></div></td></tr>';

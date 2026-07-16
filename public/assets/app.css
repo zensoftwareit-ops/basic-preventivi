@@ -176,7 +176,10 @@ textarea { min-height: 94px; padding: 10px; resize: vertical; line-height: 1.5; 
 input:focus, select:focus, textarea:focus { border-color: #79a9f8; box-shadow: 0 0 0 3px rgba(47,125,244,.11); }
 input::placeholder, textarea::placeholder { color: #a8b0bd; }
 .quotes-table { min-width: 980px; }
+.table-actions { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.table-actions form { margin: 0; }
 .icon-button { color: var(--blue); font-size: 10px; font-weight: 750; }
+.table-delete-button { padding: 0; border: 0; color: var(--red); background: transparent; cursor: pointer; font-size: 10px; font-weight: 750; }
 .pagination { display: flex; justify-content: center; gap: 5px; margin-top: 18px; }
 .pagination a { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--muted); font-size: 11px; }
 .pagination a.active { border-color: var(--blue); color: white; background: var(--blue); }
