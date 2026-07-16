@@ -25,10 +25,17 @@ $config = [
         'password' => env_value('DB_PASSWORD', ''),
         'charset' => 'utf8mb4',
     ],
-    'notifications' => [
-        'email_enabled' => env_value('NOTIFICATION_EMAIL_ENABLED', '1') === '1',
-        'email_from' => env_value('NOTIFICATION_EMAIL_FROM', ''),
-        'email_bcc' => [],
+    'mail' => [
+        'enabled' => env_value('MAIL_ENABLED', '1') === '1',
+        'host' => env_value('SMTP_HOST', ''),
+        'port' => (int) env_value('SMTP_PORT', '587'),
+        'encryption' => env_value('SMTP_ENCRYPTION', 'tls'),
+        'username' => env_value('SMTP_USERNAME', ''),
+        'password' => env_value('SMTP_PASSWORD', ''),
+        'from_email' => env_value('MAIL_FROM_EMAIL', ''),
+        'from_name' => env_value('MAIL_FROM_NAME', 'Basic Preventivi'),
+        'timeout' => (int) env_value('SMTP_TIMEOUT', '15'),
+        'bcc' => [],
     ],
 ];
 

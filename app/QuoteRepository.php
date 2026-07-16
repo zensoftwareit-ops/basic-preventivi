@@ -432,20 +432,20 @@ final class QuoteRepository
 
     public function dispatchNotificationEmails(): array
     {
-        $result = ['enabled' => (bool) config('notifications.email_enabled', true), 'sent' => 0, 'failed' => 0, 'skipped' => 0];
+        $mailConfig = (array) config('mail', []);
+        $result = [
+            'enabled' => (bool) ($mailConfig['enabled'] ?? true),
+            'transport' => 'smtp',
+            'sent' => 0,
+            'failed' => 0,
+            'skipped' => 0,
+        ];
         if (!$result['enabled']) {
             return $result;
         }
 
-        $from = str_replace(["\r", "\n"], '', trim((string) config('notifications.email_from', '')));
-        $bcc = [];
-        foreach ((array) config('notifications.email_bcc', []) as $address) {
-            $address = str_replace(["\r", "\n"], '', trim((string) $address));
-            if (filter_var($address, FILTER_VALIDATE_EMAIL)) {
-                $bcc[] = $address;
-            }
-        }
-        $bcc = array_values(array_unique($bcc));
+        $mailer = new SmtpMailer($mailConfig);
+        $bcc = (array) ($mailConfig['bcc'] ?? []);
 
         $statement = $this->pdo->query(
             "SELECT n.*, q.id AS quote_id, q.practice_code, q.customer_name,
@@ -489,18 +489,8 @@ final class QuoteRepository
                 . "Cliente: {$notification['customer_name']}\n"
                 . "Stato: {$notification['status_name']}\n\n"
                 . "Apri la pratica: {$detailUrl}\n";
-            $headers = ['Content-Type: text/plain; charset=UTF-8'];
-            if ($from !== '' && filter_var($from, FILTER_VALIDATE_EMAIL)) {
-                $headers[] = 'From: ' . $from;
-            }
-            if ($bcc !== []) {
-                $headers[] = 'Bcc: ' . implode(', ', $bcc);
-            }
-
             try {
-                if (!mail($to, $subject, $body, implode("\r\n", $headers))) {
-                    throw new RuntimeException('Il server di posta ha rifiutato il messaggio.');
-                }
+                $mailer->send($to, $bcc, $subject, $body);
                 $this->pdo->prepare('UPDATE operator_notifications SET email_sent_at = NOW(), email_error = NULL, updated_at = NOW() WHERE id = :id')
                     ->execute(['id' => $notification['id']]);
                 $result['sent']++;

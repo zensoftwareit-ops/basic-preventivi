@@ -14,6 +14,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 - follow-up interno ed email ogni 3 giorni di stato invariato;
 - il conteggio dei 3 giorni riparte da zero a ogni cambio di stato;
 - email inviata all’indirizzo dell’operatore presente in `users.email`;
+- invio tramite server SMTP esterno autenticato;
 - una o più copie nascoste BCC configurabili in `app/config.local.php`;
 - semaforo scadenza: verde entro 24 ore, giallo tra 24 e 48 ore dalla creazione, rosso oltre 48 ore;
 - follow-up e scadenze non possono essere posticipati o modificati dall’interfaccia.
@@ -22,10 +23,10 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 
 - Plesk Obsidian con estensione Git;
 - PHP 8.2 o successivo;
-- estensioni PHP `pdo_mysql` e `mbstring`;
+- estensioni PHP `pdo_mysql`, `mbstring` e `openssl`;
 - MySQL 5.5.3 o successivo oppure MariaDB compatibile;
 - HTTPS attivo sul sottodominio;
-- posta in uscita configurata sul server per usare `mail()` di PHP.
+- accesso in uscita dal server Plesk al server SMTP scelto (normalmente porta 587 o 465).
 
 ## Installazione nuova in Plesk
 
@@ -48,7 +49,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 
 1. In **Impostazioni di hosting** impostare la document root su `<APP_ROOT>/public`.
 2. Selezionare PHP 8.2 o 8.3.
-3. Verificare che `pdo_mysql` e `mbstring` siano abilitate.
+3. Verificare che `pdo_mysql`, `mbstring` e `openssl` siano abilitate.
 4. Attivare HTTPS e il reindirizzamento da HTTP a HTTPS.
 
 ### 3. Database
@@ -101,10 +102,17 @@ VALUES ('mario.rossi', 'Mario', 'Rossi', 'mario.rossi@example.it', 1);
            'user' => 'UTENTE_DATABASE_PLESK',
            'password' => 'PASSWORD_DATABASE_PLESK',
        ],
-       'notifications' => [
-           'email_enabled' => true,
-           'email_from' => 'preventivi@example.it',
-           'email_bcc' => [
+       'mail' => [
+           'enabled' => true,
+           'host' => 'smtp.example.it',
+           'port' => 587,
+           'encryption' => 'tls',
+           'username' => 'preventivi@example.it',
+           'password' => 'PASSWORD_SMTP',
+           'from_email' => 'preventivi@example.it',
+           'from_name' => 'Basic Preventivi',
+           'timeout' => 15,
+           'bcc' => [
                'responsabile@example.it',
                'direzione@example.it',
            ],
@@ -113,6 +121,25 @@ VALUES ('mario.rossi', 'Mario', 'Rossi', 'mario.rossi@example.it', 1);
    ```
 
 `app/config.local.php` è escluso da Git. Non inserire token o password nei file versionati.
+
+Parametri SMTP:
+
+- porta `587` con `encryption => 'tls'`: collegamento standard con STARTTLS;
+- porta `465` con `encryption => 'ssl'`: TLS implicito;
+- `encryption => 'none'`: solo per un relay interno fidato, mai per credenziali inviate via Internet;
+- `username` e `password`: credenziali dell'account SMTP; alcuni fornitori richiedono una password per applicazioni;
+- `from_email`: indirizzo mittente autorizzato dal fornitore SMTP;
+- `bcc`: zero, uno o più indirizzi che ricevono la copia nascosta.
+
+Il certificato TLS viene verificato. Non usare server con certificati scaduti o autofirmati. Se il provider impone un mittente uguale allo username, usare lo stesso indirizzo in `username` e `from_email`.
+
+Per verificare subito le credenziali senza aspettare un alert, da **Attività pianificate** eseguire una volta questo comando sostituendo percorso e destinatario:
+
+```text
+/opt/plesk/php/8.3/bin/php <APP_ROOT>/bin/test_smtp.php destinatario@example.it
+```
+
+Il test invia solo all'indirizzo indicato e non usa i destinatari BCC configurati. L'esito positivo restituisce `"ok": true`.
 
 ### 6. Attività pianificata
 
@@ -128,7 +155,7 @@ Gli alert compaiono anche quando viene aperta la dashboard, ma l’attività pia
    ```
 
 5. Programmare l’esecuzione ogni 5 minuti.
-6. Usare **Esegui ora**: l’output deve contenere `"ok": true`.
+6. Usare **Esegui ora**: l’output deve contenere `"ok": true`; la sezione `email` indica quanti messaggi sono stati inviati, saltati o non riusciti.
 
 Se è disponibile solo “Esegui un comando” su Plesk Linux:
 
@@ -138,7 +165,7 @@ Se è disponibile solo “Esegui un comando” su Plesk Linux:
 
 ### 7. Verifica
 
-1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok`.
+1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok` e `smtp_configured: true`.
 2. Eseguire un accesso SSO usando l’ID del primo operatore.
 3. Creare una pratica e verificare che la scadenza mostrata sia 24 ore dopo la creazione.
 
