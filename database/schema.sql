@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     first_name VARCHAR(80) NOT NULL,
     last_name VARCHAR(80) NOT NULL,
     email VARCHAR(180) NOT NULL,
-    role ENUM('operator', 'admin') NOT NULL DEFAULT 'operator',
+    role ENUM('operator', 'admin', 'super') NOT NULL DEFAULT 'operator',
     active TINYINT(1) NOT NULL DEFAULT 1,
     last_login_at DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

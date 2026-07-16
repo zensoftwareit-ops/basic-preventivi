@@ -8,8 +8,9 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 
 - SSO senza form con `id` utente e token condiviso;
 - l’utente deve esistere nella tabella `users` ed essere attivo;
-- ogni utente ha ruolo `operator` oppure `admin`;
-- solo gli admin vedono e possono aprire **Dati base** ed eliminare definitivamente i preventivi;
+- ogni utente ha ruolo `operator`, `admin` oppure `super`;
+- `admin` e `super` vedono **Dati base** e possono eliminare definitivamente i preventivi;
+- il ruolo `super` è di sola supervisione e non compare tra responsabili, ricevitori o filtri operativi;
 - scadenza di invio non modificabile, fissata a 24 ore dalla creazione della pratica;
 - primo alert interno ed email dopo 12 ore se il preventivo non risulta inviato;
 - secondo alert interno ed email dopo 24 ore se il preventivo non risulta inviato;
@@ -71,7 +72,7 @@ L’SSO non crea automaticamente gli utenti. In phpMyAdmin aprire la tabella `us
 - `first_name`: nome;
 - `last_name`: cognome;
 - `email`: indirizzo che riceverà alert e follow-up;
-- `role`: `admin` per il primo amministratore, `operator` per gli operatori normali;
+- `role`: `admin` per un amministratore operativo, `operator` per un operatore normale oppure `super` per un supervisore non operativo;
 - `active`: `1` per attivo, `0` per disattivo.
 
 Annotare l’`id` assegnato: sarà il valore passato a `sso.php`.
@@ -193,6 +194,7 @@ Il token è l’unica credenziale condivisa. L’`id` serve esclusivamente a ind
 
 - `operator`: usa dashboard, preventivi, follow-up ed esportazione Excel; non vede e non può aprire **Dati base**;
 - `admin`: dispone delle stesse funzioni e può inoltre aprire **Dati base** ed eliminare definitivamente un preventivo;
+- `super`: ha tutti i permessi di `admin`, accede via SSO e controlla l'intera applicazione, ma non è selezionabile come responsabile o ricevitore e non riceve notifiche operative;
 - il controllo è applicato lato server: nascondere il collegamento non è l’unica protezione;
 - l'eliminazione è definitiva e rimuove anche cronologia e notifiche collegate al preventivo.
 
@@ -201,6 +203,7 @@ Per modificare un ruolo da phpMyAdmin:
 ```sql
 UPDATE users SET role = 'admin' WHERE id = 1;
 UPDATE users SET role = 'operator' WHERE id = 2;
+UPDATE users SET role = 'super' WHERE id = 3;
 ```
 
 ## Esportazione Excel
@@ -232,13 +235,15 @@ POST consigliato:
    ```text
    database/migrations/20260716_users_sso_and_notifications.sql
    database/migrations/20260716_add_user_roles.sql
+   database/migrations/20260716_add_super_role.sql
    ```
 
-4. Se la prima migration era già stata importata, eseguire soltanto `database/migrations/20260716_add_user_roles.sql`.
-5. La migration ruoli imposta tutti come `operator` e promuove automaticamente ad `admin` il primo utente attivo per evitare di bloccare l'amministrazione.
-6. Verificare e correggere i ruoli dalla tabella `users` in phpMyAdmin.
-7. Aggiornare manualmente tutte le email provvisorie `@example.invalid` con gli indirizzi reali degli operatori.
-8. Aggiornare il software chiamante affinché passi `id` invece di `operator` o `username`.
+4. Se le prime due migration erano già state importate, eseguire soltanto `database/migrations/20260716_add_super_role.sql`.
+5. La migration ruoli iniziale imposta tutti come `operator` e promuove automaticamente ad `admin` il primo utente attivo per evitare di bloccare l'amministrazione.
+6. Per creare il supervisore, impostare `role = 'super'` sull'utente desiderato dalla tabella `users` in phpMyAdmin.
+7. Verificare e correggere gli altri ruoli dalla tabella `users` in phpMyAdmin.
+8. Aggiornare manualmente tutte le email provvisorie `@example.invalid` con gli indirizzi reali degli operatori.
+9. Aggiornare il software chiamante affinché passi `id` invece di `operator` o `username`.
 
 ## Aggiornamenti futuri
 

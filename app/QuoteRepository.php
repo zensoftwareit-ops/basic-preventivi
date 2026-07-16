@@ -14,6 +14,7 @@ final class QuoteRepository
     public function masterData(bool $includeInactive = false): array
     {
         $active = $includeInactive ? '' : ' WHERE active = 1';
+        $userWhere = $includeInactive ? '' : " WHERE active = 1 AND role <> 'super'";
         return [
             'services' => $this->fetchAll('SELECT id, name, active FROM services' . $active . ' ORDER BY sort_order, name'),
             'channels' => $this->fetchAll('SELECT id, name, active FROM channels' . $active . ' ORDER BY sort_order, name'),
@@ -22,7 +23,7 @@ final class QuoteRepository
             'outcomes' => $this->fetchAll('SELECT id, code, name, is_success, active FROM outcomes' . $active . ' ORDER BY sort_order, name'),
             'users' => $this->fetchAll("SELECT id, username, first_name, last_name, email, role, active,
                 TRIM(CONCAT(first_name, ' ', last_name)) AS display_name
-                FROM users" . $active . " ORDER BY last_name, first_name"),
+                FROM users" . $userWhere . " ORDER BY last_name, first_name"),
         ];
     }
 
@@ -46,8 +47,13 @@ final class QuoteRepository
         if ((int) ($input['service_id'] ?? 0) < 1) {
             $errors['service_id'] = 'Seleziona il servizio.';
         }
-        if ((int) ($input['responsible_user_id'] ?? 0) < 1) {
-            $errors['responsible_user_id'] = 'Seleziona il responsabile.';
+        $responsibleUserId = (int) ($input['responsible_user_id'] ?? 0);
+        if ($responsibleUserId < 1 || !$this->isOperationalUser($responsibleUserId)) {
+            $errors['responsible_user_id'] = 'Seleziona un responsabile operativo attivo.';
+        }
+        $receivedByUserId = (int) ($input['received_by_user_id'] ?? 0);
+        if ($receivedByUserId > 0 && !$this->isOperationalUser($receivedByUserId)) {
+            $errors['received_by_user_id'] = 'Seleziona un utente operativo attivo.';
         }
         if ((int) ($input['priority_id'] ?? 0) < 1) {
             $errors['priority_id'] = 'Seleziona la priorità.';
@@ -262,7 +268,7 @@ final class QuoteRepository
     {
         $adminStatement = $this->pdo->prepare('SELECT role FROM users WHERE id = :id AND active = 1');
         $adminStatement->execute(['id' => $actorId]);
-        if ($adminStatement->fetchColumn() !== 'admin') {
+        if (!in_array($adminStatement->fetchColumn(), ['admin', 'super'], true)) {
             throw new RuntimeException('Solo un amministratore può eliminare definitivamente un preventivo.');
         }
 
@@ -315,7 +321,7 @@ final class QuoteRepository
              FROM users u
              LEFT JOIN quotes q ON q.responsible_user_id = u.id
              LEFT JOIN statuses st ON st.id = q.status_id
-             WHERE u.active = 1
+             WHERE u.active = 1 AND u.role <> 'super'
              GROUP BY u.id, u.first_name, u.last_name
              ORDER BY open_count DESC, u.last_name, u.first_name"
         );
@@ -337,7 +343,7 @@ final class QuoteRepository
              JOIN users u ON u.id = n.user_id
              SET n.resolved_at = NOW()
              WHERE n.resolved_at IS NULL AND (
-                q.archived_at IS NOT NULL OR st.is_closed = 1 OR u.active = 0 OR q.responsible_user_id <> n.user_id
+                q.archived_at IS NOT NULL OR st.is_closed = 1 OR u.active = 0 OR u.role = 'super' OR q.responsible_user_id <> n.user_id
                 OR (n.notification_type IN ('deadline_12h', 'deadline_24h') AND q.date_sent IS NOT NULL)
                 OR (n.notification_type = 'stale_3d' AND (
                     q.status_id <> n.status_id_snapshot OR q.status_changed_at <> n.status_changed_at_snapshot
@@ -359,7 +365,7 @@ final class QuoteRepository
                  JOIN statuses st ON st.id = q.status_id
                  JOIN users u ON u.id = q.responsible_user_id
                  WHERE q.archived_at IS NULL AND q.date_sent IS NULL
-                   AND st.is_closed = 0 AND u.active = 1
+                   AND st.is_closed = 0 AND u.active = 1 AND u.role <> 'super'
                    AND q.created_at <= DATE_SUB(NOW(), INTERVAL {$hours} HOUR)"
             );
             $statement->execute();
@@ -381,7 +387,7 @@ final class QuoteRepository
              FROM quotes q
              JOIN statuses st ON st.id = q.status_id
              JOIN users u ON u.id = q.responsible_user_id
-             WHERE q.archived_at IS NULL AND st.is_closed = 0 AND u.active = 1
+             WHERE q.archived_at IS NULL AND st.is_closed = 0 AND u.active = 1 AND u.role <> 'super'
                AND TIMESTAMPDIFF(HOUR, q.status_changed_at, NOW()) >= {$interval}"
         );
         $statement->execute();
@@ -471,7 +477,7 @@ final class QuoteRepository
              JOIN quotes q ON q.id = n.quote_id
              JOIN users u ON u.id = n.user_id
              JOIN statuses st ON st.id = q.status_id
-             WHERE n.resolved_at IS NULL AND n.email_sent_at IS NULL AND u.active = 1
+             WHERE n.resolved_at IS NULL AND n.email_sent_at IS NULL AND u.active = 1 AND u.role <> 'super'
                AND q.archived_at IS NULL AND st.is_closed = 0
                AND q.responsible_user_id = n.user_id
                AND (
@@ -576,6 +582,11 @@ final class QuoteRepository
 
     private function normalize(array $input, int $actorId): array
     {
+        $receivedByUserId = $this->nullableInt($input['received_by_user_id'] ?? null);
+        if ($receivedByUserId === null && $this->isOperationalUser($actorId)) {
+            $receivedByUserId = $actorId;
+        }
+
         return [
             'request_date' => $input['request_date'],
             'request_time' => $this->nullable($input['request_time'] ?? null),
@@ -586,7 +597,7 @@ final class QuoteRepository
             'channel_id' => $this->nullableInt($input['channel_id'] ?? null),
             'service_id' => (int) $input['service_id'],
             'request_description' => $this->nullable($input['request_description'] ?? null, 10000),
-            'received_by_user_id' => $this->nullableInt($input['received_by_user_id'] ?? null) ?: $actorId,
+            'received_by_user_id' => $receivedByUserId,
             'responsible_user_id' => (int) $input['responsible_user_id'],
             'priority_id' => (int) $input['priority_id'],
             'status_id' => (int) $input['status_id'],
@@ -729,6 +740,18 @@ final class QuoteRepository
         $statement = $this->pdo->prepare("SELECT code = 'SENT' FROM statuses WHERE id = :id");
         $statement->execute(['id' => $statusId]);
         return (bool) $statement->fetchColumn();
+    }
+
+    private function isOperationalUser(int $userId): bool
+    {
+        if ($userId < 1) {
+            return false;
+        }
+        $statement = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM users WHERE id = :id AND active = 1 AND role IN ('operator', 'admin')"
+        );
+        $statement->execute(['id' => $userId]);
+        return (int) $statement->fetchColumn() === 1;
     }
 
     private function nullable(mixed $value, int $maxLength = 255): ?string

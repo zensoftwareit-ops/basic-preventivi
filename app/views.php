@@ -26,7 +26,11 @@ function render_header(string $title, string $active = 'dashboard'): void
         $class = $active === $key ? 'nav-link active' : 'nav-link';
         echo '<a class="' . $class . '" href="' . e(url('index.php', $query)) . '"><span>' . e($label) . '</span></a>';
     }
-    $roleLabel = Auth::isAdmin() ? 'Amministratore' : 'Operatore';
+    $roleLabel = match ((string) ($user['role'] ?? 'operator')) {
+        'super' => 'Supervisore',
+        'admin' => 'Amministratore',
+        default => 'Operatore',
+    };
     echo '</nav><div class="sidebar-footer"><span class="avatar">' . e(mb_strtoupper(mb_substr($user['display_name'] ?? 'U', 0, 1))) . '</span><div><strong>' . e($user['display_name'] ?? '') . '</strong><small>' . e($roleLabel) . '</small></div><a class="logout" href="' . e(url('logout.php')) . '" title="Esci">Esci</a></div></aside>';
     echo '<div class="app-shell"><header class="topbar"><button class="menu-button" type="button" data-menu aria-label="Apri menu">☰</button><div><h1>' . $titleSafe . '</h1><p>' . e((new DateTimeImmutable())->format('d/m/Y')) . '</p></div><a class="button primary compact" href="' . e(url('index.php', ['page' => 'quote_new'])) . '">+ Nuova richiesta</a></header><main class="content">';
     foreach ($flashes as $flash) {
@@ -174,6 +178,9 @@ function render_quote_form(?array $quote, array $master, array $errors): void
     $editing = $quote !== null;
     $title = $editing ? 'Modifica ' . $quote['practice_code'] : 'Nuova richiesta';
     $defaults = (new QuoteRepository())->defaults();
+    $operationalUserIds = array_map(static fn (array $user): int => (int) $user['id'], $master['users']);
+    $currentUserId = Auth::id();
+    $defaultOperationalUserId = in_array($currentUserId, $operationalUserIds, true) ? $currentUserId : null;
     render_header($title, 'quotes');
     echo '<form class="quote-form" method="post" action="index.php">' . csrf_field() . '<input type="hidden" name="action" value="save_quote"><input type="hidden" name="id" value="' . (int) ($quote['id'] ?? 0) . '">';
     echo '<div class="form-toolbar"><div><span class="eyebrow">' . ($editing ? e($quote['practice_code']) : 'Inserimento rapido') . '</span><h2>' . e($title) . '</h2><p>I campi con * sono obbligatori. La pratica riceverà un numero automatico.</p></div><div><a class="button ghost" href="' . e($editing ? url('index.php', ['page' => 'quote_view', 'id' => $quote['id']]) : url('index.php', ['page' => 'quotes'])) . '">Annulla</a><button class="button primary" type="submit">Salva pratica</button></div></div>';
@@ -191,8 +198,8 @@ function render_quote_form(?array $quote, array $master, array $errors): void
     echo '</div></section>';
 
     echo '<section class="form-section"><div class="section-intro"><span>02</span><div><h3>Gestione della pratica</h3><p>Assegna sempre responsabile, stato, priorità e scadenza.</p></div></div><div class="form-grid">';
-    select_field('received_by_user_id', 'Ricevuto da', $master['users'], form_value($quote, 'received_by_user_id', Auth::id()), $errors, 'display_name');
-    select_field('responsible_user_id', 'Responsabile *', $master['users'], form_value($quote, 'responsible_user_id', Auth::id()), $errors, 'display_name');
+    select_field('received_by_user_id', 'Ricevuto da', $master['users'], form_value($quote, 'received_by_user_id', $defaultOperationalUserId), $errors, 'display_name');
+    select_field('responsible_user_id', 'Responsabile *', $master['users'], form_value($quote, 'responsible_user_id', $defaultOperationalUserId), $errors, 'display_name');
     select_field('priority_id', 'Priorità *', $master['priorities'], form_value($quote, 'priority_id', $defaults['priority_id']), $errors, 'name');
     select_field('status_id', 'Stato *', $master['statuses'], form_value($quote, 'status_id', $defaults['status_id']), $errors, 'name');
     input_field('quote_deadline', 'Scadenza invio automatica', 'datetime-local', datetime_input(form_value($quote, 'quote_deadline', (new DateTimeImmutable('+24 hours'))->format('Y-m-d H:i:s'))), $errors, 'Fissa a 24 ore dall’inserimento', '', 'readonly');
@@ -335,7 +342,7 @@ function render_settings(array $master): void
     foreach ($master['statuses'] as $item) {
         echo '<div class="master-item">' . status_badge($item['name'], $item['color']) . '<small>' . ((int) $item['is_closed'] ? 'Stato chiuso' : 'Stato aperto') . '</small></div>';
     }
-    echo '</div></article><article class="panel"><div class="panel-head"><h3>Operatori SSO</h3></div><div class="master-list">';
+    echo '</div></article><article class="panel"><div class="panel-head"><h3>Utenti SSO</h3></div><div class="master-list">';
     foreach ($master['users'] as $item) {
         echo '<div class="master-item"><span><strong>' . e($item['display_name']) . '</strong><small>ID ' . (int) $item['id'] . ' · ' . e($item['username']) . ' · ' . e($item['email']) . '</small></span><span class="role-pill">' . e($item['role']) . ' · ' . ((int) $item['active'] ? 'Attivo' : 'Disattivo') . '</span></div>';
     }

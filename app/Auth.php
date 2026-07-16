@@ -57,7 +57,8 @@ final class Auth
 
     public static function isAdmin(): bool
     {
-        return self::check() && (string) ($_SESSION['user']['role'] ?? 'operator') === 'admin';
+        $role = (string) ($_SESSION['user']['role'] ?? 'operator');
+        return self::check() && in_array($role, ['admin', 'super'], true);
     }
 
     public static function requireAdmin(): void
