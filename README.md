@@ -22,7 +22,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 - Plesk Obsidian con estensione **Git**;
 - PHP 8.2 o successivo;
 - estensioni PHP `pdo_mysql` e `mbstring`;
-- MySQL 8 oppure una versione MariaDB compatibile;
+- MySQL 5.5.3 o successivo, oppure una versione MariaDB compatibile;
 - certificato HTTPS attivo sul sottodominio.
 
 ## Installazione in Plesk, passo per passo
@@ -83,6 +83,8 @@ La cartella `app` e il file di configurazione devono restare un livello sopra la
 4. Aprire **phpMyAdmin** per quel database.
 5. In File Manager scaricare dal progetto il file `database/schema.sql`, oppure scaricarlo dal repository GitHub.
 6. In phpMyAdmin aprire **Importa**, scegliere `schema.sql` e avviare l’importazione.
+
+Se un precedente tentativo si è interrotto con l’errore MySQL `#1293`, eliminare le eventuali tabelle create parzialmente e importare di nuovo il file `database/schema.sql` aggiornato. Lo schema usa una sola colonna `TIMESTAMP` automatica per tabella ed è compatibile anche con i server Plesk meno recenti.
 
 Per un’installazione già esistente, non reimportare tutto lo schema: eseguire soltanto `database/migrations/20260716_add_status_reminders.sql`.
 
