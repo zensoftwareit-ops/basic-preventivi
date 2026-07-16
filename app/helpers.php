@@ -137,6 +137,27 @@ function date_it(?string $value, bool $withTime = false): string
     }
 }
 
+function quote_filters(array $input): array
+{
+    $view = (string) ($input['view'] ?? 'active');
+    if (!in_array($view, ['active', 'open', 'closed', 'archived'], true)) {
+        $view = 'active';
+    }
+    $deadline = (string) ($input['deadline'] ?? '');
+    if (!in_array($deadline, ['', 'overdue', 'today', 'week'], true)) {
+        $deadline = '';
+    }
+
+    return [
+        'view' => $view,
+        'q' => mb_substr(trim((string) ($input['q'] ?? '')), 0, 160),
+        'responsible_user_id' => max(0, (int) ($input['responsible_user_id'] ?? 0)),
+        'status_id' => max(0, (int) ($input['status_id'] ?? 0)),
+        'priority_id' => max(0, (int) ($input['priority_id'] ?? 0)),
+        'deadline' => $deadline,
+    ];
+}
+
 function selected(mixed $value, mixed $expected): string
 {
     return (string) $value === (string) $expected ? ' selected' : '';

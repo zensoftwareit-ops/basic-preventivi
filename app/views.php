@@ -117,7 +117,8 @@ function render_quotes(array $result, array $filters, array $master): void
         $class = ($filters['view'] ?? 'active') === $key ? 'active' : '';
         echo '<a class="' . $class . '" href="' . e(url('index.php', ['page' => 'quotes', 'view' => $key])) . '">' . e($label) . '</a>';
     }
-    echo '</div><span class="result-count">' . (int) $result['total'] . ' pratiche</span></div>';
+    $exportFilters = array_filter($filters, static fn (mixed $value): bool => $value !== '' && $value !== 0 && $value !== null);
+    echo '</div><div class="page-actions-meta"><span class="result-count">' . (int) $result['total'] . ' pratiche</span><a class="button secondary compact" href="' . e(url('export_quotes.php', $exportFilters)) . '">Esporta XLSX</a></div></div>';
     echo '<form class="filter-panel" method="get" action="index.php"><input type="hidden" name="page" value="quotes"><input type="hidden" name="view" value="' . e($filters['view'] ?? 'active') . '"><label class="search-field"><span>Cerca</span><input type="search" name="q" value="' . e($filters['q'] ?? '') . '" placeholder="Cliente, pratica, descrizione…"></label>';
     echo '<label><span>Responsabile</span><select name="responsible_user_id"><option value="">Tutti</option>';
     foreach ($master['users'] as $item) {

@@ -69,14 +69,7 @@ try {
             break;
 
         case 'quotes':
-            $filters = [
-                'view' => (string) ($_GET['view'] ?? 'active'),
-                'q' => trim((string) ($_GET['q'] ?? '')),
-                'responsible_user_id' => (int) ($_GET['responsible_user_id'] ?? 0),
-                'status_id' => (int) ($_GET['status_id'] ?? 0),
-                'priority_id' => (int) ($_GET['priority_id'] ?? 0),
-                'deadline' => (string) ($_GET['deadline'] ?? ''),
-            ];
+            $filters = quote_filters($_GET);
             render_quotes($repository->listQuotes($filters, (int) ($_GET['p'] ?? 1)), $filters, $repository->masterData());
             break;
 

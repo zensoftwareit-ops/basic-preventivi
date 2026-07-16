@@ -16,6 +16,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 - email inviata all’indirizzo dell’operatore presente in `users.email`;
 - invio tramite server SMTP esterno autenticato;
 - una o più copie nascoste BCC configurabili in `app/config.local.php`;
+- esportazione Excel `.xlsx` dell'intera tabella preventivi, rispettando i filtri applicati;
 - semaforo scadenza: verde entro 24 ore, giallo tra 24 e 48 ore dalla creazione, rosso oltre 48 ore;
 - follow-up e scadenze non possono essere posticipati o modificati dall’interfaccia.
 
@@ -23,7 +24,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 
 - Plesk Obsidian con estensione Git;
 - PHP 8.2 o successivo;
-- estensioni PHP `pdo_mysql`, `mbstring` e `openssl`;
+- estensioni PHP `pdo_mysql`, `mbstring`, `openssl` e `zip`;
 - MySQL 5.5.3 o successivo oppure MariaDB compatibile;
 - HTTPS attivo sul sottodominio;
 - accesso in uscita dal server Plesk al server SMTP scelto (normalmente porta 587 o 465).
@@ -49,7 +50,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 
 1. In **Impostazioni di hosting** impostare la document root su `<APP_ROOT>/public`.
 2. Selezionare PHP 8.2 o 8.3.
-3. Verificare che `pdo_mysql`, `mbstring` e `openssl` siano abilitate.
+3. Verificare che `pdo_mysql`, `mbstring`, `openssl` e `zip` siano abilitate.
 4. Attivare HTTPS e il reindirizzamento da HTTP a HTTPS.
 
 ### 3. Database
@@ -165,7 +166,7 @@ Se è disponibile solo “Esegui un comando” su Plesk Linux:
 
 ### 7. Verifica
 
-1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok` e `smtp_configured: true`.
+1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok`, `smtp_configured: true` e `xlsx_available: true`.
 2. Eseguire un accesso SSO usando l’ID del primo operatore.
 3. Creare una pratica e verificare che la scadenza mostrata sia 24 ore dopo la creazione.
 
@@ -184,6 +185,14 @@ https://preventivi.example.it/sso.php?id=12&token=TOKEN_CONDIVISO
 ```
 
 Il token è l’unica credenziale condivisa. L’`id` serve esclusivamente a individuare l’operatore nella tabella `users`. L’accesso fallisce se l’utente non esiste o ha `active = 0`.
+
+## Esportazione Excel
+
+Nella pagina **Preventivi** usare il pulsante **Esporta XLSX**. Il file include tutte le pratiche che corrispondono ai filtri correnti, non soltanto le 25 righe della pagina visualizzata.
+
+Sono mantenuti i filtri per vista, ricerca, responsabile, stato, priorità e scadenza. Il foglio contiene una tabella Excel con intestazioni bloccate, filtri di colonna, righe alternate, date ordinabili, percentuali e importi in euro. Per proteggere la memoria del server, una singola esportazione può contenere al massimo 20.000 pratiche; oltre tale limite occorre applicare filtri più specifici.
+
+L'esportazione richiede l'estensione PHP `zip`, verificabile da `health.php` tramite `xlsx_available`.
 
 POST consigliato:
 

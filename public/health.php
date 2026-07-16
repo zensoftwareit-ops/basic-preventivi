@@ -15,6 +15,7 @@ try {
     echo json_encode([
         'status' => 'ok',
         'smtp_configured' => $smtpConfigured,
+        'xlsx_available' => class_exists(ZipArchive::class),
         'time' => date(DATE_ATOM),
     ], JSON_THROW_ON_ERROR);
 } catch (Throwable) {

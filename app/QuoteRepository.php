@@ -212,39 +212,7 @@ final class QuoteRepository
 
     public function listQuotes(array $filters, int $page = 1, int $perPage = 25): array
     {
-        $conditions = [];
-        $params = [];
-        $view = $filters['view'] ?? 'active';
-        if ($view === 'open') {
-            $conditions[] = 'st.is_closed = 0 AND q.archived_at IS NULL';
-        } elseif ($view === 'closed') {
-            $conditions[] = 'st.is_closed = 1 AND q.archived_at IS NULL';
-        } elseif ($view === 'archived') {
-            $conditions[] = 'q.archived_at IS NOT NULL';
-        } else {
-            $conditions[] = 'q.archived_at IS NULL';
-        }
-
-        if (($filters['q'] ?? '') !== '') {
-            $conditions[] = '(q.practice_code LIKE :search OR q.customer_name LIKE :search OR q.customer_contact LIKE :search OR q.request_description LIKE :search)';
-            $params['search'] = '%' . trim((string) $filters['q']) . '%';
-        }
-        foreach (['responsible_user_id' => 'q.responsible_user_id', 'status_id' => 'q.status_id', 'priority_id' => 'q.priority_id'] as $key => $column) {
-            if ((int) ($filters[$key] ?? 0) > 0) {
-                $conditions[] = $column . ' = :' . $key;
-                $params[$key] = (int) $filters[$key];
-            }
-        }
-        $deadline = $filters['deadline'] ?? '';
-        if ($deadline === 'overdue') {
-            $conditions[] = 'st.is_closed = 0 AND q.date_sent IS NULL AND q.quote_deadline < NOW()';
-        } elseif ($deadline === 'today') {
-            $conditions[] = 'st.is_closed = 0 AND q.date_sent IS NULL AND DATE(q.quote_deadline) = CURDATE()';
-        } elseif ($deadline === 'week') {
-            $conditions[] = 'st.is_closed = 0 AND q.date_sent IS NULL AND q.quote_deadline >= NOW() AND q.quote_deadline < DATE_ADD(CURDATE(), INTERVAL 7 DAY)';
-        }
-
-        $where = ' WHERE ' . implode(' AND ', $conditions);
+        [$where, $params] = $this->quoteFilter($filters);
         $countStatement = $this->pdo->prepare(
             'SELECT COUNT(*) FROM quotes q JOIN statuses st ON st.id = q.status_id' . $where
         );
@@ -265,6 +233,28 @@ final class QuoteRepository
         $statement->execute();
 
         return ['items' => $statement->fetchAll(), 'total' => $total, 'page' => $page, 'pages' => $pages];
+    }
+
+    public function exportQuotes(array $filters, int $maxRows = 20000): array
+    {
+        [$where, $params] = $this->quoteFilter($filters);
+        $countStatement = $this->pdo->prepare(
+            'SELECT COUNT(*) FROM quotes q JOIN statuses st ON st.id = q.status_id' . $where
+        );
+        $countStatement->execute($params);
+        $total = (int) $countStatement->fetchColumn();
+        if ($total > $maxRows) {
+            throw new RuntimeException('L\'export supera ' . number_format($maxRows, 0, ',', '.') . ' righe: applicare filtri piu specifici.');
+        }
+
+        $statement = $this->pdo->prepare(
+            $this->baseSelect() . $where . ' ORDER BY st.is_closed, q.quote_deadline, q.created_at DESC'
+        );
+        foreach ($params as $key => $value) {
+            $statement->bindValue(':' . $key, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+        }
+        $statement->execute();
+        return $statement->fetchAll();
     }
 
     public function dashboard(int $userId): array
@@ -609,6 +599,43 @@ final class QuoteRepository
              LEFT JOIN outcomes outc ON outc.id = q.outcome_id
              JOIN users responsible ON responsible.id = q.responsible_user_id
              LEFT JOIN users receiver ON receiver.id = q.received_by_user_id";
+    }
+
+    private function quoteFilter(array $filters): array
+    {
+        $conditions = [];
+        $params = [];
+        $view = $filters['view'] ?? 'active';
+        if ($view === 'open') {
+            $conditions[] = 'st.is_closed = 0 AND q.archived_at IS NULL';
+        } elseif ($view === 'closed') {
+            $conditions[] = 'st.is_closed = 1 AND q.archived_at IS NULL';
+        } elseif ($view === 'archived') {
+            $conditions[] = 'q.archived_at IS NOT NULL';
+        } else {
+            $conditions[] = 'q.archived_at IS NULL';
+        }
+
+        if (($filters['q'] ?? '') !== '') {
+            $conditions[] = '(q.practice_code LIKE :search OR q.customer_name LIKE :search OR q.customer_contact LIKE :search OR q.request_description LIKE :search)';
+            $params['search'] = '%' . trim((string) $filters['q']) . '%';
+        }
+        foreach (['responsible_user_id' => 'q.responsible_user_id', 'status_id' => 'q.status_id', 'priority_id' => 'q.priority_id'] as $key => $column) {
+            if ((int) ($filters[$key] ?? 0) > 0) {
+                $conditions[] = $column . ' = :' . $key;
+                $params[$key] = (int) $filters[$key];
+            }
+        }
+        $deadline = $filters['deadline'] ?? '';
+        if ($deadline === 'overdue') {
+            $conditions[] = 'st.is_closed = 0 AND q.date_sent IS NULL AND q.quote_deadline < NOW()';
+        } elseif ($deadline === 'today') {
+            $conditions[] = 'st.is_closed = 0 AND q.date_sent IS NULL AND DATE(q.quote_deadline) = CURDATE()';
+        } elseif ($deadline === 'week') {
+            $conditions[] = 'st.is_closed = 0 AND q.date_sent IS NULL AND q.quote_deadline >= NOW() AND q.quote_deadline < DATE_ADD(CURDATE(), INTERVAL 7 DAY)';
+        }
+
+        return [' WHERE ' . implode(' AND ', $conditions), $params];
     }
 
     private function rawQuote(int $id): ?array
