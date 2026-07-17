@@ -94,6 +94,7 @@ final class Auth
             $user = $statement->fetch();
             if ($user && (int) $user['active'] === 1) {
                 $_SESSION['user']['role'] = (string) $user['role'];
+                self::ensureDeviceSession();
                 if (self::touchDeviceSession()) {
                     return;
                 }
@@ -118,6 +119,37 @@ final class Auth
             setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
         }
         session_destroy();
+    }
+
+    public static function persistentDeviceActive(): bool
+    {
+        $token = (string) ($_COOKIE[self::deviceCookieName()] ?? '');
+        return (int) ($_SESSION['device_session_id'] ?? 0) > 0
+            && preg_match('/^[A-Za-z0-9_-]{43}$/', $token) === 1;
+    }
+
+    private static function ensureDeviceSession(): void
+    {
+        if (self::persistentDeviceActive()) {
+            return;
+        }
+
+        $deviceSessionId = (int) ($_SESSION['device_session_id'] ?? 0);
+        if ($deviceSessionId > 0) {
+            try {
+                Database::connection()->prepare(
+                    'DELETE FROM device_sessions WHERE id = :id AND user_id = :user_id'
+                )->execute([
+                    'id' => $deviceSessionId,
+                    'user_id' => (int) ($_SESSION['user']['id'] ?? 0),
+                ]);
+            } catch (Throwable) {
+                // rememberDevice gestisce autonomamente un database non ancora migrato.
+            }
+        }
+
+        unset($_SESSION['device_session_id'], $_SESSION['device_session_touched_at']);
+        self::rememberDevice((int) ($_SESSION['user']['id'] ?? 0), 'session_upgrade');
     }
 
     private static function restoreDeviceSession(): bool

@@ -230,6 +230,8 @@ Non esiste e non serve un form di login. La prima attivazione parte dall'utente 
 
 Il QR non contiene il token SSO condiviso: contiene un codice casuale temporaneo del quale nel database viene conservato soltanto l'hash. Generare un nuovo QR invalida quello precedente. Da quel momento l'icona può essere aperta direttamente: il dispositivo riconosce l'operatore anche dopo la chiusura del browser o la scadenza della normale sessione PHP. La durata si rinnova all'uso ed è configurata con `device_session_days`; **Esci** revoca solamente il dispositivo corrente.
 
+La barra laterale mostra **Accesso dispositivo attivo** quando il browser possiede sia la sessione persistente sia il relativo cookie. Dopo un aggiornamento, anche le vecchie sessioni PHP ancora valide vengono convertite automaticamente in sessioni dispositivo: è sufficiente aprire o ricaricare una pagina prima che la vecchia sessione scada.
+
 ### Android
 
 1. Inquadrare con Chrome il QR generato dalla versione desktop.

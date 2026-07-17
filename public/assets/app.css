@@ -56,6 +56,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .sidebar-tool:hover { background: rgba(255,255,255,.14); }
 .sidebar-tool.active { border-color: rgba(76,213,151,.55); color: #9cebc4; }
 .sidebar-tools small { min-height: 14px; color: #aebbd0; font-size: 8px; line-height: 1.4; }
+.sidebar-tools .device-login-status { min-height: 0; color: #9eabc0; font-size: 8px; }
+.sidebar-tools .device-login-status.active { color: #83dfb1; }
 .sidebar-footer { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; padding: 16px 7px 0; border-top: 1px solid rgba(255,255,255,.09); }
 .avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: white; background: #40506b; font-weight: 750; }
 .sidebar-footer strong, .sidebar-footer small { display: block; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
