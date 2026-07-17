@@ -285,13 +285,13 @@ input::placeholder, textarea::placeholder { color: #a8b0bd; }
 .setup-card li strong { font-size: 12px; }
 .setup-card li small { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .setup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.setup-actions.single { grid-template-columns: 1fr; }
 
 @media (max-width: 1250px) {
   .kpi-grid { grid-template-columns: repeat(3, minmax(150px,1fr)); }
 }
 
 @media (max-width: 980px) {
-  .desktop-only { display: none !important; }
   .sidebar { transform: translateX(-100%); transition: transform .22s ease; }
   .menu-open .sidebar { transform: translateX(0); }
   .app-shell { margin-left: 0; }
@@ -308,6 +308,7 @@ input::placeholder, textarea::placeholder { color: #a8b0bd; }
   .topbar { height: 68px; padding: 0 15px; }
   .topbar .button { font-size: 0; width: 38px; padding: 0; }
   .topbar .button::after { font-size: 22px; content: "+"; }
+  .topbar .topbar-pair { display: none; }
   .content { padding: 20px 14px 42px; }
   .hero-row, .detail-head, .form-toolbar { align-items: flex-start; flex-direction: column; }
   .detail-actions { width: 100%; }

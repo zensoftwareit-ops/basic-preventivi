@@ -12,11 +12,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['ok' => false, 'error' => 'Metodo non consentito.']);
     exit;
 }
-if ((string) (Auth::user()['role'] ?? 'operator') === 'super') {
-    http_response_code(403);
-    echo json_encode(['ok' => false, 'error' => 'Il supervisore non è un utente operativo.']);
-    exit;
-}
 $provided = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
 if (!hash_equals(csrf_token(), $provided)) {
     http_response_code(419);

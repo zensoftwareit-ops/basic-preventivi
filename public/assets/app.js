@@ -3,7 +3,7 @@ const backdrop = document.querySelector('[data-backdrop]');
 const installButton = document.querySelector('[data-install-app]');
 const pushButton = document.querySelector('[data-push-toggle]');
 const pwaStatus = document.querySelector('[data-pwa-status]');
-const pairButton = document.querySelector('[data-mobile-pair]');
+const pairButtons = document.querySelectorAll('[data-mobile-pair]');
 const pairModal = document.querySelector('[data-pair-modal]');
 const pairCloseButton = document.querySelector('[data-pair-close]');
 const pairRefreshButton = document.querySelector('[data-pair-refresh]');
@@ -217,9 +217,11 @@ window.addEventListener('beforeinstallprompt', (event) => {
 
 installButton?.addEventListener('click', () => promptInstall());
 
-pairButton?.addEventListener('click', () => {
-  openModal(pairModal);
-  createMobilePairing();
+pairButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    openModal(pairModal);
+    createMobilePairing();
+  });
 });
 pairCloseButton?.addEventListener('click', () => closeModal(pairModal));
 pairRefreshButton?.addEventListener('click', createMobilePairing);
