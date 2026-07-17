@@ -7,6 +7,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 ## Regole operative
 
 - SSO senza form con `id` utente e token condiviso;
+- dopo il primo SSO, accesso persistente e revocabile sul singolo dispositivo per 180 giorni di inattività;
 - l’utente deve esistere nella tabella `users` ed essere attivo;
 - ogni utente ha ruolo `operator`, `admin` oppure `super`;
 - `admin` e `super` vedono **Dati base** e possono eliminare definitivamente i preventivi;
@@ -101,6 +102,8 @@ VALUES ('mario.rossi', 'Mario', 'Rossi', 'mario.rossi@example.it', 'admin', 1);
            'url' => 'https://preventivi.example.it',
            'shared_token' => 'INSERIRE_QUI_UN_TOKEN_LUNGO_E_CASUALE',
            'session_secure' => true,
+           'device_cookie_name' => 'basic_preventivi_device',
+           'device_session_days' => 180,
        ],
        'db' => [
            'host' => 'localhost',
@@ -194,13 +197,24 @@ Se è disponibile solo “Esegui un comando” su Plesk Linux:
 
 ### 7. Verifica
 
-1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok`, `smtp_configured: true`, `xlsx_available: true`, `pwa_available: true` e `push_configured: true`.
+1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok`, `smtp_configured: true`, `xlsx_available: true`, `pwa_available: true`, `push_configured: true` e `device_login_available: true`.
 2. Eseguire un accesso SSO usando l’ID del primo operatore.
 3. Creare una pratica e verificare che la scadenza mostrata sia 24 ore dopo la creazione.
 
 ## Installazione su smartphone e notifiche push
 
 L'applicazione è una PWA: si installa dalla stessa URL del sottodominio e non richiede App Store, Play Store o un account Apple Developer.
+
+### Primo accesso sul telefono
+
+Non esiste e non serve un form di login. La prima attivazione deve partire dal software aziendale sullo stesso telefono:
+
+1. L'operatore apre il software aziendale dal telefono.
+2. Preme il pulsante **Apri Preventivi**, che fa navigare il browser verso `sso.php` passando il token condiviso e il suo `id`.
+3. `sso.php` verifica l'utente, crea la sessione dispositivo e apre la dashboard.
+4. Dalla dashboard l'operatore installa la PWA e attiva le notifiche.
+
+Da quel momento l'icona può essere aperta direttamente: il dispositivo riconosce l'operatore anche dopo la chiusura del browser o la scadenza della normale sessione PHP. La durata si rinnova all'uso ed è configurata con `device_session_days`; **Esci** revoca solamente il dispositivo corrente. Se il software aziendale non è utilizzabile sul telefono, deve mostrare un collegamento o QR che apra lo stesso endpoint SSO nel browser del telefono.
 
 ### Android
 
@@ -213,12 +227,16 @@ L'applicazione è una PWA: si installa dalla stessa URL del sottodominio e non r
 
 Le notifiche Web Push richiedono iOS/iPadOS 16.4 o successivo e la web app aggiunta alla schermata Home.
 
+Per copiare automaticamente nella nuova web app il cookie ottenuto con il primo SSO è consigliato iOS/iPadOS 17.2 o successivo. L'ordine corretto è sempre: accesso SSO in Safari, aggiunta alla schermata Home, apertura dall'icona. Se l'icona era stata creata prima dell'accesso, eliminarla e ripetere l'installazione dopo il login SSO.
+
 1. Aprire il sottodominio in Safari ed entrare tramite SSO.
 2. Usare **Condividi → Aggiungi alla schermata Home**.
 3. Aprire **Preventivi** dalla nuova icona, non dalla scheda Safari.
 4. Premere **Attiva notifiche** e accettare la richiesta di iOS.
 
 Il consenso vale per singolo dispositivo. **Notifiche attive · Disattiva** rimuove soltanto il dispositivo corrente. Le push sono associate all'utente SSO e vengono inviate insieme agli alert delle 12 ore, 24 ore e ai follow-up dei 3 giorni.
+
+La sottoscrizione del browser viene riallineata automaticamente all'ultimo `id` autenticato via SSO sul dispositivo. Se lo stesso telefono viene consegnato a un altro operatore, eseguire **Esci** e poi il nuovo accesso dal software aziendale.
 
 Dopo aver autorizzato un dispositivo, è possibile inviare subito una notifica di prova da Plesk sostituendo l'ID utente:
 
@@ -241,6 +259,8 @@ https://preventivi.example.it/sso.php?id=12&token=TOKEN_CONDIVISO
 ```
 
 Il token è l’unica credenziale condivisa. L’`id` serve esclusivamente a individuare l’operatore nella tabella `users`. L’accesso fallisce se l’utente non esiste o ha `active = 0`.
+
+Il software chiamante deve effettuare una navigazione reale del browser, preferibilmente con il form `POST` descritto sotto: una chiamata server-to-server o AJAX non può installare il cookie sul telefono dell'operatore. Dopo il primo accesso valido, nel cookie rimane solo un token casuale; nel database ne viene salvato esclusivamente l'hash. Disattivare l'utente invalida automaticamente tutte le sue sessioni dispositivo.
 
 ## Ruoli e permessi
 
@@ -289,15 +309,17 @@ POST consigliato:
    database/migrations/20260716_add_user_roles.sql
    database/migrations/20260716_add_super_role.sql
    database/migrations/20260717_add_web_push.sql
+   database/migrations/20260717_add_device_sessions.sql
    ```
 
-4. Per aggiornare la versione immediatamente precedente, che include già il ruolo `super`, importare soltanto `database/migrations/20260717_add_web_push.sql`.
-5. Se `users.role` non accetta ancora il valore `super`, importare prima `20260716_add_super_role.sql` e poi `20260717_add_web_push.sql`.
-6. La migration ruoli iniziale imposta tutti come `operator` e promuove automaticamente ad `admin` il primo utente attivo per evitare di bloccare l'amministrazione.
-7. Per creare il supervisore, impostare `role = 'super'` sull'utente desiderato dalla tabella `users` in phpMyAdmin.
-8. Verificare e correggere gli altri ruoli dalla tabella `users` in phpMyAdmin.
-9. Aggiornare manualmente tutte le email provvisorie `@example.invalid` con gli indirizzi reali degli operatori.
-10. Aggiornare il software chiamante affinché passi `id` invece di `operator` o `username`.
+4. Per aggiornare la versione immediatamente precedente, che include già il ruolo `super`, importare `20260717_add_web_push.sql` e poi `20260717_add_device_sessions.sql`.
+5. Se la migration Web Push è già stata importata, importare soltanto `20260717_add_device_sessions.sql`.
+6. Se `users.role` non accetta ancora il valore `super`, importare prima `20260716_add_super_role.sql`, poi le due migration del 17 luglio.
+7. La migration ruoli iniziale imposta tutti come `operator` e promuove automaticamente ad `admin` il primo utente attivo per evitare di bloccare l'amministrazione.
+8. Per creare il supervisore, impostare `role = 'super'` sull'utente desiderato dalla tabella `users` in phpMyAdmin.
+9. Verificare e correggere gli altri ruoli dalla tabella `users` in phpMyAdmin.
+10. Aggiornare manualmente tutte le email provvisorie `@example.invalid` con gli indirizzi reali degli operatori.
+11. Aggiornare il software chiamante affinché passi `id` invece di `operator` o `username`.
 
 ## Aggiornamenti futuri
 

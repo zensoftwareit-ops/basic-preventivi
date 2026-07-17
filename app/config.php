@@ -16,6 +16,8 @@ $config = [
         'shared_token' => env_value('APP_SHARED_TOKEN', ''),
         'session_name' => env_value('APP_SESSION_NAME', 'basic_preventivi'),
         'session_secure' => env_value('SESSION_COOKIE_SECURE', '0') === '1',
+        'device_cookie_name' => env_value('APP_DEVICE_COOKIE_NAME', 'basic_preventivi_device'),
+        'device_session_days' => max(1, (int) env_value('APP_DEVICE_SESSION_DAYS', '180')),
     ],
     'db' => [
         'host' => env_value('DB_HOST', '127.0.0.1'),

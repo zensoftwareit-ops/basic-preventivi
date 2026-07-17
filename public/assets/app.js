@@ -47,6 +47,15 @@ async function refreshPushButton() {
   pushButton.textContent = subscription ? 'Notifiche attive · Disattiva' : 'Attiva notifiche';
 }
 
+async function syncExistingPushSubscription() {
+  if (!serviceWorkerRegistration || !publicKey) return;
+  const subscription = await serviceWorkerRegistration.pushManager.getSubscription();
+  if (!subscription) return;
+  const payload = subscription.toJSON();
+  payload.contentEncoding = PushManager.supportedContentEncodings?.[0] || 'aes128gcm';
+  await sendSubscription('push_subscribe.php', payload);
+}
+
 async function enablePush() {
   if (!serviceWorkerRegistration || !publicKey) return;
   const permission = await Notification.requestPermission();
@@ -138,6 +147,11 @@ pushButton?.addEventListener('click', async () => {
     serviceWorkerRegistration = await navigator.serviceWorker.register('sw.js');
     await navigator.serviceWorker.ready;
     if ('PushManager' in window && 'Notification' in window && publicKey) {
+      try {
+        await syncExistingPushSubscription();
+      } catch (error) {
+        setPwaStatus('Riconnessione notifiche in attesa. Ricarica la pagina.');
+      }
       await refreshPushButton();
     } else if (!publicKey) {
       setPwaStatus('Notifiche push non ancora configurate dal server.');

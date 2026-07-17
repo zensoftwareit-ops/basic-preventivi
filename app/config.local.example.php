@@ -7,6 +7,8 @@ return [
         'url' => 'https://preventivi.example.it',
         'shared_token' => 'INSERIRE_UN_TOKEN_CASUALE_LUNGO',
         'session_secure' => true,
+        'device_cookie_name' => 'basic_preventivi_device',
+        'device_session_days' => 180,
     ],
     'db' => [
         'host' => 'localhost',

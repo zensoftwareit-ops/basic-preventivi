@@ -22,7 +22,7 @@ function render_header(string $title, string $active = 'dashboard'): void
     echo '<meta name="csrf-token" content="' . e(csrf_token()) . '"><meta name="theme-color" content="#2f7df4">';
     echo '<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">';
     echo '<meta name="color-scheme" content="light"><title>' . $titleSafe . ' · ' . $appName . '</title>';
-    echo '<link rel="stylesheet" href="assets/app.css?v=20260717"></head><body data-push-public-key="' . e($pushPublicKey) . '">';
+    echo '<link rel="stylesheet" href="assets/app.css?v=20260717b"></head><body data-push-public-key="' . e($pushPublicKey) . '">';
     echo '<aside class="sidebar" id="sidebar"><a class="brand" href="' . e(url('index.php')) . '"><span class="brand-mark">B</span><span><strong>Basic</strong><small>Gestione preventivi</small></span></a>';
     echo '<nav class="nav">';
     foreach ($items as $key => [$label, $query]) {
@@ -46,7 +46,7 @@ function render_header(string $title, string $active = 'dashboard'): void
 
 function render_footer(): void
 {
-    echo '</main></div><div class="backdrop" data-backdrop></div><script src="assets/app.js?v=20260717"></script></body></html>';
+    echo '</main></div><div class="backdrop" data-backdrop></div><script src="assets/app.js?v=20260717b"></script></body></html>';
 }
 
 function status_badge(string $name, ?string $color): string

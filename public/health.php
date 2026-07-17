@@ -6,7 +6,12 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 header('Content-Type: application/json; charset=utf-8');
 try {
-    Database::connection()->query('SELECT 1');
+    $pdo = Database::connection();
+    $pdo->query('SELECT 1');
+    $deviceSessionsAvailable = (bool) $pdo->query(
+        "SELECT COUNT(*) FROM information_schema.tables
+         WHERE table_schema = DATABASE() AND table_name = 'device_sessions'"
+    )->fetchColumn();
     $mail = (array) config('mail', []);
     $smtpConfigured = !empty($mail['host'])
         && !empty($mail['username'])
@@ -24,6 +29,7 @@ try {
         'xlsx_available' => class_exists(ZipArchive::class),
         'pwa_available' => is_file(__DIR__ . '/manifest.webmanifest') && is_file(__DIR__ . '/sw.js'),
         'push_configured' => $pushConfigured,
+        'device_login_available' => $deviceSessionsAvailable,
         'time' => date(DATE_ATOM),
     ], JSON_THROW_ON_ERROR);
 } catch (Throwable) {
