@@ -83,7 +83,9 @@ final class Auth
             $user = $statement->fetch();
             if ($user && (int) $user['active'] === 1) {
                 $_SESSION['user']['role'] = (string) $user['role'];
-                return;
+                if (self::touchDeviceSession()) {
+                    return;
+                }
             }
             $_SESSION = [];
         }
@@ -151,6 +153,7 @@ final class Auth
             $_SESSION['authenticated_at'] = time();
             $_SESSION['auth_source'] = 'device';
             $_SESSION['device_session_id'] = $deviceSessionId;
+            $_SESSION['device_session_touched_at'] = time();
             self::writeDeviceCookie($token);
             return true;
         } catch (Throwable) {
@@ -187,6 +190,7 @@ final class Auth
                 'expires_at' => $expiresAt,
             ]);
             $_SESSION['device_session_id'] = (int) $pdo->lastInsertId();
+            $_SESSION['device_session_touched_at'] = time();
             $_SESSION['auth_source'] = 'sso';
             self::writeDeviceCookie($token);
         } catch (Throwable) {
@@ -206,6 +210,44 @@ final class Auth
             }
         }
         self::clearDeviceCookie();
+    }
+
+    private static function touchDeviceSession(): bool
+    {
+        $deviceSessionId = (int) ($_SESSION['device_session_id'] ?? 0);
+        if ($deviceSessionId < 1 || (int) ($_SESSION['device_session_touched_at'] ?? 0) > time() - 86400) {
+            return true;
+        }
+
+        try {
+            $expiresAt = (new DateTimeImmutable('now'))
+                ->modify('+' . self::deviceSessionDays() . ' days')
+                ->format('Y-m-d H:i:s');
+            $statement = Database::connection()->prepare(
+                'UPDATE device_sessions
+                 SET last_used_at = NOW(), expires_at = :expires_at
+                 WHERE id = :id AND user_id = :user_id AND expires_at > NOW()'
+            );
+            $statement->execute([
+                'expires_at' => $expiresAt,
+                'id' => $deviceSessionId,
+                'user_id' => (int) ($_SESSION['user']['id'] ?? 0),
+            ]);
+            if ($statement->rowCount() !== 1) {
+                self::clearDeviceCookie();
+                return false;
+            }
+
+            $_SESSION['device_session_touched_at'] = time();
+            $token = (string) ($_COOKIE[self::deviceCookieName()] ?? '');
+            if (preg_match('/^[A-Za-z0-9_-]{43}$/', $token)) {
+                self::writeDeviceCookie($token);
+            }
+            return true;
+        } catch (Throwable) {
+            // Un problema temporaneo non deve interrompere una sessione PHP ancora valida.
+            return true;
+        }
     }
 
     private static function writeDeviceCookie(string $token): void
