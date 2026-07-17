@@ -166,13 +166,19 @@ Il test invia solo all'indirizzo indicato e non usa i destinatari BCC configurat
 
 #### Chiavi VAPID per le notifiche push
 
-Generare una sola coppia di chiavi sul server usando la stessa versione PHP del sito:
+Generare una sola coppia di chiavi sul server usando la stessa versione PHP del sito e indicando un indirizzo email tecnico reale:
 
 ```text
-/opt/plesk/php/8.3/bin/php <APP_ROOT>/bin/generate_vapid_keys.php
+/opt/plesk/php/8.3/bin/php <APP_ROOT>/bin/generate_vapid_keys.php preventivi@tuodominio.it
 ```
 
-Il comando stampa il blocco `push` completo. Copiarlo in `app/config.local.php` e sostituire `vapid_subject` con un indirizzo `mailto:` reale. La chiave privata non deve essere pubblicata su GitHub. Conservare sempre la stessa coppia: cambiandola, i dispositivi dovranno autorizzare nuovamente le notifiche.
+Il comando non stampa più le chiavi: crea direttamente il file privato `app/vapid.local.php`, che viene caricato automaticamente dopo `config.local.php` ed è escluso da Git. L'output breve deve terminare con `Configurazione VAPID creata correttamente`. Non è necessario copiare nulla dal terminale o dall'output dell'attività pianificata.
+
+Se il file esiste già, il comando non lo sovrascrive. Conservare sempre la stessa coppia: cambiandola, i dispositivi devono autorizzare nuovamente le notifiche. L'opzione `--force` rigenera intenzionalmente le chiavi e va usata solo se si vuole invalidare tutte le sottoscrizioni esistenti.
+
+Da Plesk è possibile eseguirlo in **Attività pianificate → Aggiungi attività → Esegui un comando**. Il comando deve essere lanciato una sola volta; dopo l'esito positivo l'attività può essere rimossa.
+
+Se si sceglie invece **Esegui uno script PHP**, impostare come percorso `<APP_ROOT>/bin/generate_vapid_keys.php` e come argomento `preventivi@tuodominio.it`. Se `mail.from_email` è già compilato in `config.local.php`, l'argomento può essere omesso e verrà usato automaticamente quell'indirizzo.
 
 ### 6. Attività pianificata
 

@@ -49,11 +49,14 @@ $config = [
     ],
 ];
 
-$localConfig = __DIR__ . '/config.local.php';
-if (is_file($localConfig)) {
-    $overrides = require $localConfig;
+$privateConfigs = [__DIR__ . '/config.local.php', __DIR__ . '/vapid.local.php'];
+foreach ($privateConfigs as $privateConfig) {
+    if (!is_file($privateConfig)) {
+        continue;
+    }
+    $overrides = require $privateConfig;
     if (!is_array($overrides)) {
-        throw new RuntimeException('app/config.local.php deve restituire un array.');
+        throw new RuntimeException(basename($privateConfig) . ' deve restituire un array.');
     }
     $config = array_replace_recursive($config, $overrides);
 }

@@ -11,6 +11,35 @@ if (!extension_loaded('openssl')) {
     exit(1);
 }
 
+$force = in_array('--force', $argv, true);
+$target = dirname(__DIR__) . '/app/vapid.local.php';
+if (is_file($target) && !$force) {
+    echo "Configurazione VAPID già presente e lasciata invariata:\n{$target}\n";
+    echo "Per rigenerarla intenzionalmente aggiungere --force.\n";
+    exit(0);
+}
+$emailArgument = '';
+foreach (array_slice($argv, 1) as $argument) {
+    if (!str_starts_with((string) $argument, '--')) {
+        $emailArgument = trim((string) $argument);
+        break;
+    }
+}
+$email = $emailArgument;
+if ($email === '') {
+    try {
+        $appConfig = require dirname(__DIR__) . '/app/config.php';
+        $email = trim((string) ($appConfig['mail']['from_email'] ?? ''));
+    } catch (Throwable) {
+        $email = '';
+    }
+}
+if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+    fwrite(STDERR, "Uso: php generate_vapid_keys.php email@dominio.it [--force]\n");
+    fwrite(STDERR, "Indicare l'email come argomento oppure configurare mail.from_email in config.local.php.\n");
+    exit(2);
+}
+
 $key = openssl_pkey_new([
     'private_key_type' => OPENSSL_KEYTYPE_EC,
     'curve_name' => 'prime256v1',
@@ -28,12 +57,29 @@ if (!is_string($x) || !is_string($y)) {
 }
 $public = rtrim(strtr(base64_encode("\x04" . $x . $y), '+/', '-_'), '=');
 
-echo "Chiavi VAPID generate. Conservare la chiave privata solo in app/config.local.php.\n\n";
-echo "'push' => [\n";
-echo "    'enabled' => true,\n";
-echo "    'vapid_subject' => 'mailto:preventivi@example.it',\n";
-echo "    'vapid_public_key' => '" . $public . "',\n";
-echo "    'vapid_private_key' => <<<'PEM'\n" . trim($privatePem) . "\nPEM,\n";
-echo "    'ttl' => 86400,\n";
-echo "    'timeout' => 20,\n";
-echo "],\n";
+$content = "<?php\n\ndeclare(strict_types=1);\n\nreturn [\n";
+$content .= "    'push' => [\n";
+$content .= "        'enabled' => true,\n";
+$content .= "        'vapid_subject' => 'mailto:" . str_replace("'", "\\'", $email) . "',\n";
+$content .= "        'vapid_public_key' => '" . $public . "',\n";
+$content .= "        'vapid_private_key' => <<<'PEM'\n" . trim($privatePem) . "\nPEM,\n";
+$content .= "        'ttl' => 86400,\n";
+$content .= "        'timeout' => 20,\n";
+$content .= "    ],\n];\n";
+
+$temporary = $target . '.tmp.' . bin2hex(random_bytes(5));
+if (file_put_contents($temporary, $content, LOCK_EX) === false) {
+    fwrite(STDERR, "Impossibile scrivere la configurazione VAPID in app/.\n");
+    exit(1);
+}
+@chmod($temporary, 0600);
+if (!rename($temporary, $target)) {
+    @unlink($temporary);
+    fwrite(STDERR, "Impossibile attivare il file app/vapid.local.php.\n");
+    exit(1);
+}
+
+echo "Configurazione VAPID creata correttamente.\n";
+echo "File: {$target}\n";
+echo "Contatto: mailto:{$email}\n";
+echo "Non devi copiare alcuna chiave. Verifica ora health.php.\n";

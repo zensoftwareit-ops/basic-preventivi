@@ -1,4 +1,5 @@
 /app/config.local.php
+/app/vapid.local.php
 /.env
 /*.log
 /var/
