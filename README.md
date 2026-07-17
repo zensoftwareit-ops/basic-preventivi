@@ -174,6 +174,8 @@ Generare una sola coppia di chiavi sul server usando la stessa versione PHP del 
 
 Il comando non stampa più le chiavi: crea direttamente il file privato `app/vapid.local.php`, che viene caricato automaticamente dopo `config.local.php` ed è escluso da Git. L'output breve deve terminare con `Configurazione VAPID creata correttamente`. Non è necessario copiare nulla dal terminale o dall'output dell'attività pianificata.
 
+Se dopo la generazione il sito restituisce errore 500, rinominare temporaneamente `app/vapid.local.php` in `app/vapid.local.bad` dal File Manager, aggiornare il codice e rigenerare con l'opzione `--force`. Il caricatore ignora automaticamente un file VAPID illeggibile o non valido, così la configurazione push non può più bloccare il resto dell'applicazione.
+
 Se il file esiste già, il comando non lo sovrascrive. Conservare sempre la stessa coppia: cambiandola, i dispositivi devono autorizzare nuovamente le notifiche. L'opzione `--force` rigenera intenzionalmente le chiavi e va usata solo se si vuole invalidare tutte le sottoscrizioni esistenti.
 
 Da Plesk è possibile eseguirlo in **Attività pianificate → Aggiungi attività → Esegui un comando**. Il comando deve essere lanciato una sola volta; dopo l'esito positivo l'attività può essere rimossa.

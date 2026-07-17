@@ -54,8 +54,27 @@ foreach ($privateConfigs as $privateConfig) {
     if (!is_file($privateConfig)) {
         continue;
     }
-    $overrides = require $privateConfig;
+    if (!is_readable($privateConfig)) {
+        if (basename($privateConfig) === 'vapid.local.php') {
+            error_log('Configurazione VAPID non leggibile: ' . $privateConfig);
+            continue;
+        }
+        throw new RuntimeException(basename($privateConfig) . ' non è leggibile.');
+    }
+    try {
+        $overrides = require $privateConfig;
+    } catch (Throwable $exception) {
+        if (basename($privateConfig) === 'vapid.local.php') {
+            error_log('Configurazione VAPID ignorata: ' . $exception->getMessage());
+            continue;
+        }
+        throw $exception;
+    }
     if (!is_array($overrides)) {
+        if (basename($privateConfig) === 'vapid.local.php') {
+            error_log('Configurazione VAPID ignorata: il file non restituisce un array.');
+            continue;
+        }
         throw new RuntimeException(basename($privateConfig) . ' deve restituire un array.');
     }
     $config = array_replace_recursive($config, $overrides);

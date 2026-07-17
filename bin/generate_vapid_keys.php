@@ -62,7 +62,7 @@ $content .= "    'push' => [\n";
 $content .= "        'enabled' => true,\n";
 $content .= "        'vapid_subject' => 'mailto:" . str_replace("'", "\\'", $email) . "',\n";
 $content .= "        'vapid_public_key' => '" . $public . "',\n";
-$content .= "        'vapid_private_key' => <<<'PEM'\n" . trim($privatePem) . "\nPEM,\n";
+$content .= "        'vapid_private_key' => " . var_export(trim($privatePem), true) . ",\n";
 $content .= "        'ttl' => 86400,\n";
 $content .= "        'timeout' => 20,\n";
 $content .= "    ],\n];\n";
@@ -72,7 +72,7 @@ if (file_put_contents($temporary, $content, LOCK_EX) === false) {
     fwrite(STDERR, "Impossibile scrivere la configurazione VAPID in app/.\n");
     exit(1);
 }
-@chmod($temporary, 0600);
+@chmod($temporary, 0640);
 if (!rename($temporary, $target)) {
     @unlink($temporary);
     fwrite(STDERR, "Impossibile attivare il file app/vapid.local.php.\n");
