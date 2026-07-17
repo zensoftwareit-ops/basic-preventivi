@@ -180,6 +180,8 @@ Da Plesk è possibile eseguirlo in **Attività pianificate → Aggiungi attivit�
 
 Se si sceglie invece **Esegui uno script PHP**, impostare come percorso `<APP_ROOT>/bin/generate_vapid_keys.php` e come argomento `preventivi@tuodominio.it`. Se `mail.from_email` è già compilato in `config.local.php`, l'argomento può essere omesso e verrà usato automaticamente quell'indirizzo.
 
+Il generatore è compatibile anche con l'interprete PHP 7 eventualmente predefinito nelle attività Plesk. Il sito e soprattutto il cron `check_notifications.php` devono invece usare PHP 8.2 o 8.3, come indicato nei requisiti dell'applicazione.
+
 ### 6. Attività pianificata
 
 Gli alert compaiono anche quando viene aperta la dashboard, ma l’attività pianificata è necessaria per generarli puntualmente e inviare email e notifiche push.

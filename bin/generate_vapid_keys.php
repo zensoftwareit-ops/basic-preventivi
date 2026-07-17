@@ -20,7 +20,7 @@ if (is_file($target) && !$force) {
 }
 $emailArgument = '';
 foreach (array_slice($argv, 1) as $argument) {
-    if (!str_starts_with((string) $argument, '--')) {
+    if (strncmp((string) $argument, '--', 2) !== 0) {
         $emailArgument = trim((string) $argument);
         break;
     }
@@ -30,7 +30,7 @@ if ($email === '') {
     try {
         $appConfig = require dirname(__DIR__) . '/app/config.php';
         $email = trim((string) ($appConfig['mail']['from_email'] ?? ''));
-    } catch (Throwable) {
+    } catch (Throwable $exception) {
         $email = '';
     }
 }
