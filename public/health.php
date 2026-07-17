@@ -30,12 +30,22 @@ try {
         && !empty($push['vapid_private_key'])
         && extension_loaded('openssl')
         && extension_loaded('curl');
+    $vapidConfigFile = dirname(__DIR__) . '/app/vapid.local.php';
     echo json_encode([
         'status' => 'ok',
         'smtp_configured' => $smtpConfigured,
         'xlsx_available' => class_exists(ZipArchive::class),
         'pwa_available' => is_file(__DIR__ . '/manifest.webmanifest') && is_file(__DIR__ . '/sw.js'),
         'push_configured' => $pushConfigured,
+        'push_diagnostics' => [
+            'config_file_exists' => is_file($vapidConfigFile),
+            'config_file_readable' => is_readable($vapidConfigFile),
+            'subject_configured' => !empty($push['vapid_subject']),
+            'public_key_configured' => !empty($push['vapid_public_key']),
+            'private_key_configured' => !empty($push['vapid_private_key']),
+            'openssl_loaded' => extension_loaded('openssl'),
+            'curl_loaded' => extension_loaded('curl'),
+        ],
         'device_login_available' => $deviceSessionsAvailable,
         'mobile_pair_available' => $mobilePairAvailable,
         'time' => date(DATE_ATOM),

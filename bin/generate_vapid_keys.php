@@ -72,7 +72,8 @@ if (file_put_contents($temporary, $content, LOCK_EX) === false) {
     fwrite(STDERR, "Impossibile scrivere la configurazione VAPID in app/.\n");
     exit(1);
 }
-@chmod($temporary, 0640);
+// La directory app/ è fuori dalla document root; 0644 evita incompatibilità tra utente task e PHP-FPM Plesk.
+@chmod($temporary, 0644);
 if (!rename($temporary, $target)) {
     @unlink($temporary);
     fwrite(STDERR, "Impossibile attivare il file app/vapid.local.php.\n");

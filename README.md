@@ -176,6 +176,8 @@ Il comando non stampa più le chiavi: crea direttamente il file privato `app/vap
 
 Se dopo la generazione il sito restituisce errore 500, rinominare temporaneamente `app/vapid.local.php` in `app/vapid.local.bad` dal File Manager, aggiornare il codice e rigenerare con l'opzione `--force`. Il caricatore ignora automaticamente un file VAPID illeggibile o non valido, così la configurazione push non può più bloccare il resto dell'applicazione.
 
+`health.php` espone la sezione non sensibile `push_diagnostics`: permette di controllare esistenza e leggibilità del file, presenza delle tre impostazioni VAPID ed estensioni `openssl`/`curl`, senza mostrare alcuna chiave.
+
 Se il file esiste già, il comando non lo sovrascrive. Conservare sempre la stessa coppia: cambiandola, i dispositivi devono autorizzare nuovamente le notifiche. L'opzione `--force` rigenera intenzionalmente le chiavi e va usata solo se si vuole invalidare tutte le sottoscrizioni esistenti.
 
 Da Plesk è possibile eseguirlo in **Attività pianificate → Aggiungi attività → Esegui un comando**. Il comando deve essere lanciato una sola volta; dopo l'esito positivo l'attività può essere rimossa.
