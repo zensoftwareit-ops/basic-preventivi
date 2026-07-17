@@ -21,6 +21,10 @@ let installPrompt = null;
 let serviceWorkerRegistration = null;
 let pairTimer = null;
 
+function isStandaloneApp() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
 function closeMenu() {
   document.body.classList.remove('menu-open');
 }
@@ -211,6 +215,11 @@ document.querySelectorAll('[data-confirm]').forEach((form) => {
 
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
+  if (isStandaloneApp()) {
+    installPrompt = null;
+    if (installButton) installButton.hidden = true;
+    return;
+  }
   installPrompt = event;
   if (installButton) installButton.hidden = false;
 });
@@ -250,9 +259,11 @@ mobileSetupPush?.addEventListener('click', async () => {
 });
 
 window.addEventListener('appinstalled', () => {
+  installPrompt = null;
   if (installButton) installButton.hidden = true;
+  completeMobileSetup();
+  closeModal(mobileSetupModal);
   setPwaStatus('App installata.');
-  if (mobileSetupStatus) mobileSetupStatus.textContent = 'App installata. Ora attiva le notifiche.';
 });
 
 pushButton?.addEventListener('click', async () => {
@@ -274,16 +285,24 @@ pushButton?.addEventListener('click', async () => {
 });
 
 (async () => {
+  const standalone = isStandaloneApp();
+  document.body.classList.toggle('pwa-standalone', standalone);
+  if (standalone) {
+    installPrompt = null;
+    if (installButton) installButton.hidden = true;
+    if (mobileSetupInstall) mobileSetupInstall.hidden = true;
+    completeMobileSetup();
+  }
+
   let setupDismissed = false;
   try {
     setupDismissed = window.sessionStorage.getItem('basicMobileSetupDismissed') === '1';
   } catch (error) {
     setupDismissed = false;
   }
-  if (document.body.dataset.mobileSetup === '1' && !setupDismissed) {
+  if (!standalone && document.body.dataset.mobileSetup === '1' && !setupDismissed) {
     openModal(mobileSetupModal);
   }
-  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!standalone && installButton) {
     window.setTimeout(() => { installButton.hidden = false; }, 1200);
   }

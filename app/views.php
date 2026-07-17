@@ -24,7 +24,7 @@ function render_header(string $title, string $active = 'dashboard'): void
     echo '<meta name="csrf-token" content="' . e(csrf_token()) . '"><meta name="theme-color" content="#2f7df4">';
     echo '<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">';
     echo '<meta name="color-scheme" content="light"><title>' . $titleSafe . ' · ' . $appName . '</title>';
-    echo '<link rel="stylesheet" href="assets/app.css?v=20260717e"></head><body data-push-public-key="' . e($pushPublicKey) . '" data-mobile-setup="' . ($mobileSetup ? '1' : '0') . '">';
+    echo '<link rel="stylesheet" href="assets/app.css?v=20260717f"></head><body data-push-public-key="' . e($pushPublicKey) . '" data-mobile-setup="' . ($mobileSetup ? '1' : '0') . '">';
     echo '<aside class="sidebar" id="sidebar"><a class="brand" href="' . e(url('index.php')) . '"><span class="brand-mark">B</span><span><strong>Basic</strong><small>Gestione preventivi</small></span></a>';
     echo '<nav class="nav">';
     foreach ($items as $key => [$label, $query]) {
@@ -63,7 +63,7 @@ function render_footer(): void
     echo '</main></div><div class="backdrop" data-backdrop></div>';
     echo '<section class="modal-layer" data-pair-modal hidden role="dialog" aria-modal="true" aria-labelledby="pair-title"><div class="modal-card pair-card"><button class="modal-close" type="button" data-pair-close aria-label="Chiudi">×</button><span class="eyebrow">App smartphone</span><h2 id="pair-title">Collega questo utente</h2><p>Inquadra il QR con la fotocamera del telefono. Il collegamento è personale, monouso e valido per 10 minuti.</p><div class="qr-frame" data-pair-qr><span>Generazione QR…</span></div><strong class="modal-status" data-pair-status aria-live="polite"></strong><small data-pair-countdown></small><button class="button secondary compact" type="button" data-pair-refresh>Genera un nuovo QR</button></div></section>';
     echo '<section class="modal-layer" data-mobile-setup-modal hidden role="dialog" aria-modal="true" aria-labelledby="mobile-setup-title"><div class="modal-card setup-card"><button class="modal-close" type="button" data-mobile-setup-close aria-label="Chiudi">×</button><span class="eyebrow">Telefono collegato</span><h2 id="mobile-setup-title">Completa l’installazione</h2><p>L’accesso è già attivo per questo utente. Installa Preventivi per usarlo come un’app.</p><ol><li><span>1</span><div><strong>Installa l’app</strong><small>Su iPhone usa Condividi → Aggiungi alla schermata Home.</small></div></li>' . $pushStep . '</ol><div class="' . $setupActionsClass . '"><button class="button primary" type="button" data-mobile-setup-install>Installa app</button>' . $pushSetupButton . '</div><small class="modal-status" data-mobile-setup-status aria-live="polite"></small></div></section>';
-    echo '<script src="assets/vendor/qrcode.js?v=df13f829"></script><script src="assets/app.js?v=20260717e"></script></body></html>';
+    echo '<script src="assets/vendor/qrcode.js?v=df13f829"></script><script src="assets/app.js?v=20260717f"></script></body></html>';
 }
 
 function status_badge(string $name, ?string $color): string

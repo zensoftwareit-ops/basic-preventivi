@@ -232,6 +232,8 @@ Il QR non contiene il token SSO condiviso: contiene un codice casuale temporaneo
 
 La barra laterale mostra **Accesso dispositivo attivo** quando il browser possiede sia la sessione persistente sia il relativo cookie. Dopo un aggiornamento, anche le vecchie sessioni PHP ancora valide vengono convertite automaticamente in sessioni dispositivo: è sufficiente aprire o ricaricare una pagina prima che la vecchia sessione scada.
 
+Quando la PWA viene aperta dall'icona installata, gli inviti **Installa app** non vengono più mostrati. Nella navigazione mobile il comando **Collega smartphone / QR** è nascosto: l'abbinamento si avvia dalla versione desktop.
+
 ### Android
 
 1. Inquadrare con Chrome il QR generato dalla versione desktop.
