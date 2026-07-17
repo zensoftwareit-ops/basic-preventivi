@@ -12,10 +12,18 @@ try {
         && !empty($mail['username'])
         && !empty($mail['password'])
         && filter_var((string) ($mail['from_email'] ?? ''), FILTER_VALIDATE_EMAIL) !== false;
+    $push = (array) config('push', []);
+    $pushConfigured = !empty($push['vapid_subject'])
+        && !empty($push['vapid_public_key'])
+        && !empty($push['vapid_private_key'])
+        && extension_loaded('openssl')
+        && extension_loaded('curl');
     echo json_encode([
         'status' => 'ok',
         'smtp_configured' => $smtpConfigured,
         'xlsx_available' => class_exists(ZipArchive::class),
+        'pwa_available' => is_file(__DIR__ . '/manifest.webmanifest') && is_file(__DIR__ . '/sw.js'),
+        'push_configured' => $pushConfigured,
         'time' => date(DATE_ATOM),
     ], JSON_THROW_ON_ERROR);
 } catch (Throwable) {

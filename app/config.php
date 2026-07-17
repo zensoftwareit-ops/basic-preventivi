@@ -37,6 +37,14 @@ $config = [
         'timeout' => (int) env_value('SMTP_TIMEOUT', '15'),
         'bcc' => [],
     ],
+    'push' => [
+        'enabled' => env_value('PUSH_ENABLED', '1') === '1',
+        'vapid_subject' => env_value('PUSH_VAPID_SUBJECT', ''),
+        'vapid_public_key' => env_value('PUSH_VAPID_PUBLIC_KEY', ''),
+        'vapid_private_key' => str_replace('\\n', "\n", (string) env_value('PUSH_VAPID_PRIVATE_KEY', '')),
+        'ttl' => (int) env_value('PUSH_TTL', '86400'),
+        'timeout' => (int) env_value('PUSH_TIMEOUT', '20'),
+    ],
 ];
 
 $localConfig = __DIR__ . '/config.local.php';

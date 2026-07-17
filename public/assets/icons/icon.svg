@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Basic Preventivi">
+  <rect width="512" height="512" rx="112" fill="#2f7df4"/>
+  <path fill="#fff" d="M157 112h116c80 0 126 33 126 91 0 37-19 64-54 78 45 13 68 44 68 91 0 69-52 108-143 108H157V112Zm105 145c40 0 59-14 59-43 0-27-20-40-60-40h-27v83h28Zm8 161c44 0 65-17 65-51 0-32-22-48-66-48h-35v99h36Z"/>
+</svg>

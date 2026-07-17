@@ -451,6 +451,168 @@ final class QuoteRepository
         }
     }
 
+    public function savePushSubscription(int $userId, array $subscription, string $userAgent): void
+    {
+        $endpoint = trim((string) ($subscription['endpoint'] ?? ''));
+        $keys = is_array($subscription['keys'] ?? null) ? $subscription['keys'] : [];
+        $p256dh = trim((string) ($keys['p256dh'] ?? ''));
+        $authToken = trim((string) ($keys['auth'] ?? ''));
+        $parts = parse_url($endpoint);
+        if ($endpoint === '' || strlen($endpoint) > 2048 || !is_array($parts)
+            || ($parts['scheme'] ?? '') !== 'https' || empty($parts['host'])) {
+            throw new InvalidArgumentException('Endpoint push non valido.');
+        }
+        $decode = static function (string $value): string|false {
+            $padding = (4 - strlen($value) % 4) % 4;
+            return base64_decode(strtr($value . str_repeat('=', $padding), '-_', '+/'), true);
+        };
+        $publicRaw = $decode($p256dh);
+        $authRaw = $decode($authToken);
+        if (!is_string($publicRaw) || strlen($publicRaw) !== 65 || $publicRaw[0] !== "\x04"
+            || !is_string($authRaw) || strlen($authRaw) < 16) {
+            throw new InvalidArgumentException('Chiavi della sottoscrizione push non valide.');
+        }
+        $contentEncoding = (string) ($subscription['contentEncoding'] ?? 'aes128gcm');
+        if ($contentEncoding !== 'aes128gcm') {
+            throw new InvalidArgumentException('Codifica push non supportata.');
+        }
+
+        $statement = $this->pdo->prepare(
+            'INSERT INTO push_subscriptions (
+                user_id, endpoint, endpoint_hash, p256dh, auth_token, content_encoding,
+                user_agent, active, last_error, updated_at
+             ) VALUES (
+                :user_id, :endpoint, :endpoint_hash, :p256dh, :auth_token, :content_encoding,
+                :user_agent, 1, NULL, NOW()
+             ) ON DUPLICATE KEY UPDATE
+                user_id = VALUES(user_id), endpoint = VALUES(endpoint), p256dh = VALUES(p256dh),
+                auth_token = VALUES(auth_token), content_encoding = VALUES(content_encoding),
+                user_agent = VALUES(user_agent), active = 1, last_error = NULL, updated_at = NOW()'
+        );
+        $statement->execute([
+            'user_id' => $userId,
+            'endpoint' => $endpoint,
+            'endpoint_hash' => hash('sha256', $endpoint),
+            'p256dh' => $p256dh,
+            'auth_token' => $authToken,
+            'content_encoding' => $contentEncoding,
+            'user_agent' => mb_substr($userAgent, 0, 255),
+        ]);
+    }
+
+    public function removePushSubscription(int $userId, string $endpoint): void
+    {
+        $endpoint = trim($endpoint);
+        if ($endpoint === '') {
+            return;
+        }
+        $statement = $this->pdo->prepare(
+            'UPDATE push_subscriptions SET active = 0, updated_at = NOW()
+             WHERE user_id = :user_id AND endpoint_hash = :endpoint_hash'
+        );
+        $statement->execute(['user_id' => $userId, 'endpoint_hash' => hash('sha256', $endpoint)]);
+    }
+
+    public function dispatchNotificationPushes(): array
+    {
+        $pushConfig = (array) config('push', []);
+        $result = [
+            'enabled' => (bool) ($pushConfig['enabled'] ?? true),
+            'configured' => !empty($pushConfig['vapid_subject'])
+                && !empty($pushConfig['vapid_public_key'])
+                && !empty($pushConfig['vapid_private_key']),
+            'sent' => 0,
+            'failed' => 0,
+            'expired' => 0,
+        ];
+        if (!$result['enabled'] || !$result['configured']) {
+            return $result;
+        }
+
+        $sender = new WebPushSender($pushConfig);
+        $statement = $this->pdo->query(
+            "SELECT n.id AS notification_id, n.notification_type, q.id AS quote_id,
+                    q.practice_code, q.customer_name, ps.id AS subscription_id,
+                    ps.endpoint, ps.p256dh, ps.auth_token
+             FROM operator_notifications n
+             JOIN quotes q ON q.id = n.quote_id
+             JOIN users u ON u.id = n.user_id
+             JOIN statuses st ON st.id = q.status_id
+             JOIN push_subscriptions ps ON ps.user_id = n.user_id AND ps.active = 1
+             LEFT JOIN push_deliveries pd
+               ON pd.notification_id = n.id AND pd.subscription_id = ps.id
+             WHERE pd.id IS NULL AND n.resolved_at IS NULL
+               AND u.active = 1 AND u.role <> 'super'
+               AND q.archived_at IS NULL AND st.is_closed = 0
+               AND q.responsible_user_id = n.user_id
+               AND (
+                    (n.notification_type IN ('deadline_12h', 'deadline_24h') AND q.date_sent IS NULL)
+                    OR (n.notification_type = 'stale_3d'
+                        AND q.status_id = n.status_id_snapshot
+                        AND q.status_changed_at = n.status_changed_at_snapshot)
+               )
+             ORDER BY n.due_at ASC, n.id ASC"
+        );
+
+        foreach ($statement->fetchAll() as $notification) {
+            [$title, $message] = match ($notification['notification_type']) {
+                'deadline_12h' => ['Primo alert preventivo', 'Sono trascorse 12 ore e il preventivo non risulta inviato.'],
+                'deadline_24h' => ['Preventivo scaduto', 'Sono trascorse 24 ore: la scadenza di invio è stata superata.'],
+                default => ['Follow-up preventivo', 'Lo stato del preventivo non cambia da 3 giorni.'],
+            };
+            $payload = [
+                'title' => $title,
+                'body' => $notification['practice_code'] . ' · ' . $notification['customer_name'] . "\n" . $message,
+                'url' => url('index.php', ['page' => 'quote_view', 'id' => $notification['quote_id']]),
+                'icon' => url('assets/icons/icon-192.png'),
+                'badge' => url('assets/icons/badge-96.png'),
+                'tag' => 'basic-quote-' . $notification['quote_id'],
+            ];
+            try {
+                $delivery = $sender->send($notification, $payload);
+                if ($delivery['success']) {
+                    $this->pdo->prepare(
+                        'INSERT IGNORE INTO push_deliveries
+                         (notification_id, subscription_id, response_code, sent_at)
+                         VALUES (:notification_id, :subscription_id, :response_code, NOW())'
+                    )->execute([
+                        'notification_id' => $notification['notification_id'],
+                        'subscription_id' => $notification['subscription_id'],
+                        'response_code' => $delivery['status'],
+                    ]);
+                    $this->pdo->prepare(
+                        'UPDATE push_subscriptions
+                         SET last_success_at = NOW(), last_error = NULL, updated_at = NOW() WHERE id = :id'
+                    )->execute(['id' => $notification['subscription_id']]);
+                    $result['sent']++;
+                    continue;
+                }
+                $error = (string) ($delivery['error'] ?? 'Invio push non riuscito.');
+                if ($delivery['expired']) {
+                    $this->pdo->prepare(
+                        'UPDATE push_subscriptions SET active = 0, last_error = :error, updated_at = NOW() WHERE id = :id'
+                    )->execute(['error' => $error, 'id' => $notification['subscription_id']]);
+                    $result['expired']++;
+                } else {
+                    $this->pdo->prepare(
+                        'UPDATE push_subscriptions SET last_error = :error, updated_at = NOW() WHERE id = :id'
+                    )->execute(['error' => $error, 'id' => $notification['subscription_id']]);
+                    $result['failed']++;
+                }
+            } catch (Throwable $exception) {
+                $this->pdo->prepare(
+                    'UPDATE push_subscriptions SET last_error = :error, updated_at = NOW() WHERE id = :id'
+                )->execute([
+                    'error' => mb_substr($exception->getMessage(), 0, 500),
+                    'id' => $notification['subscription_id'],
+                ]);
+                $result['failed']++;
+            }
+        }
+
+        return $result;
+    }
+
     public function dispatchNotificationEmails(): array
     {
         $mailConfig = (array) config('mail', []);

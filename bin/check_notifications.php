@@ -13,11 +13,13 @@ try {
     $repository = new QuoteRepository();
     $generated = $repository->generateNotifications();
     $email = $repository->dispatchNotificationEmails();
+    $push = $repository->dispatchNotificationPushes();
 
     echo json_encode([
         'ok' => true,
         'generated' => $generated,
         'email' => $email,
+        'push' => $push,
         'checked_at' => (new DateTimeImmutable())->format(DATE_ATOM),
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
 } catch (Throwable $exception) {

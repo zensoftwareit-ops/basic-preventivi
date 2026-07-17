@@ -51,7 +51,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .nav-link { padding: 11px 13px; border-radius: 10px; color: #aebcd0; font-size: 14px; font-weight: 650; }
 .nav-link:hover { background: rgba(255,255,255,.06); color: white; }
 .nav-link.active { background: rgba(47,125,244,.2); color: #fff; box-shadow: inset 3px 0 0 var(--blue); }
-.sidebar-footer { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; margin-top: auto; padding: 16px 7px 0; border-top: 1px solid rgba(255,255,255,.09); }
+.sidebar-tools { display: grid; gap: 7px; margin-top: auto; padding: 12px 7px; border-top: 1px solid rgba(255,255,255,.09); }
+.sidebar-tool { width: 100%; min-height: 34px; padding: 7px 10px; border: 1px solid rgba(255,255,255,.18); border-radius: 8px; color: #eaf2ff; background: rgba(255,255,255,.08); cursor: pointer; font-size: 10px; font-weight: 750; text-align: left; }
+.sidebar-tool:hover { background: rgba(255,255,255,.14); }
+.sidebar-tool.active { border-color: rgba(76,213,151,.55); color: #9cebc4; }
+.sidebar-tools small { min-height: 14px; color: #aebbd0; font-size: 8px; line-height: 1.4; }
+.sidebar-footer { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; padding: 16px 7px 0; border-top: 1px solid rgba(255,255,255,.09); }
 .avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: white; background: #40506b; font-weight: 750; }
 .sidebar-footer strong, .sidebar-footer small { display: block; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sidebar-footer strong { color: white; font-size: 12px; }

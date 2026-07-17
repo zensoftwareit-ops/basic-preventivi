@@ -17,9 +17,12 @@ function render_header(string $title, string $active = 'dashboard'): void
         $items['settings'] = ['Dati base', ['page' => 'settings']];
     }
 
-    echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
+    $pushPublicKey = (string) config('push.vapid_public_key', '');
+    echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">';
+    echo '<meta name="csrf-token" content="' . e(csrf_token()) . '"><meta name="theme-color" content="#2f7df4">';
+    echo '<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">';
     echo '<meta name="color-scheme" content="light"><title>' . $titleSafe . ' · ' . $appName . '</title>';
-    echo '<link rel="stylesheet" href="assets/app.css"></head><body>';
+    echo '<link rel="stylesheet" href="assets/app.css?v=20260717"></head><body data-push-public-key="' . e($pushPublicKey) . '">';
     echo '<aside class="sidebar" id="sidebar"><a class="brand" href="' . e(url('index.php')) . '"><span class="brand-mark">B</span><span><strong>Basic</strong><small>Gestione preventivi</small></span></a>';
     echo '<nav class="nav">';
     foreach ($items as $key => [$label, $query]) {
@@ -31,7 +34,10 @@ function render_header(string $title, string $active = 'dashboard'): void
         'admin' => 'Amministratore',
         default => 'Operatore',
     };
-    echo '</nav><div class="sidebar-footer"><span class="avatar">' . e(mb_strtoupper(mb_substr($user['display_name'] ?? 'U', 0, 1))) . '</span><div><strong>' . e($user['display_name'] ?? '') . '</strong><small>' . e($roleLabel) . '</small></div><a class="logout" href="' . e(url('logout.php')) . '" title="Esci">Esci</a></div></aside>';
+    $pushControl = ($user['role'] ?? 'operator') === 'super'
+        ? ''
+        : '<button class="sidebar-tool" type="button" data-push-toggle hidden>Attiva notifiche</button>';
+    echo '</nav><div class="sidebar-tools"><button class="sidebar-tool" type="button" data-install-app hidden>Installa app</button>' . $pushControl . '<small data-pwa-status aria-live="polite"></small></div><div class="sidebar-footer"><span class="avatar">' . e(mb_strtoupper(mb_substr($user['display_name'] ?? 'U', 0, 1))) . '</span><div><strong>' . e($user['display_name'] ?? '') . '</strong><small>' . e($roleLabel) . '</small></div><a class="logout" href="' . e(url('logout.php')) . '" title="Esci">Esci</a></div></aside>';
     echo '<div class="app-shell"><header class="topbar"><button class="menu-button" type="button" data-menu aria-label="Apri menu">☰</button><div><h1>' . $titleSafe . '</h1><p>' . e((new DateTimeImmutable())->format('d/m/Y')) . '</p></div><a class="button primary compact" href="' . e(url('index.php', ['page' => 'quote_new'])) . '">+ Nuova richiesta</a></header><main class="content">';
     foreach ($flashes as $flash) {
         echo '<div class="alert ' . e($flash['type']) . '">' . e($flash['message']) . '</div>';
@@ -40,7 +46,7 @@ function render_header(string $title, string $active = 'dashboard'): void
 
 function render_footer(): void
 {
-    echo '</main></div><div class="backdrop" data-backdrop></div><script src="assets/app.js"></script></body></html>';
+    echo '</main></div><div class="backdrop" data-backdrop></div><script src="assets/app.js?v=20260717"></script></body></html>';
 }
 
 function status_badge(string $name, ?string $color): string

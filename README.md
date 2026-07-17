@@ -15,6 +15,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 - primo alert interno ed email dopo 12 ore se il preventivo non risulta inviato;
 - secondo alert interno ed email dopo 24 ore se il preventivo non risulta inviato;
 - follow-up interno ed email ogni 3 giorni di stato invariato;
+- gli stessi alert possono arrivare come notifiche push sui dispositivi autorizzati dall'operatore;
 - il conteggio dei 3 giorni riparte da zero a ogni cambio di stato;
 - email inviata all’indirizzo dell’operatore presente in `users.email`;
 - invio tramite server SMTP esterno autenticato;
@@ -27,10 +28,11 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 
 - Plesk Obsidian con estensione Git;
 - PHP 8.2 o successivo;
-- estensioni PHP `pdo_mysql`, `mbstring`, `openssl` e `zip`;
+- estensioni PHP `pdo_mysql`, `mbstring`, `openssl`, `curl` e `zip`;
 - MySQL 5.5.3 o successivo oppure MariaDB compatibile;
 - HTTPS attivo sul sottodominio;
 - accesso in uscita dal server Plesk al server SMTP scelto (normalmente porta 587 o 465).
+- accesso HTTPS in uscita sulla porta 443 verso i servizi Web Push dei browser.
 
 ## Installazione nuova in Plesk
 
@@ -53,7 +55,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 
 1. In **Impostazioni di hosting** impostare la document root su `<APP_ROOT>/public`.
 2. Selezionare PHP 8.2 o 8.3.
-3. Verificare che `pdo_mysql`, `mbstring`, `openssl` e `zip` siano abilitate.
+3. Verificare che `pdo_mysql`, `mbstring`, `openssl`, `curl` e `zip` siano abilitate.
 4. Attivare HTTPS e il reindirizzamento da HTTP a HTTPS.
 
 ### 3. Database
@@ -122,6 +124,18 @@ VALUES ('mario.rossi', 'Mario', 'Rossi', 'mario.rossi@example.it', 'admin', 1);
                'direzione@example.it',
            ],
        ],
+       'push' => [
+           'enabled' => true,
+           'vapid_subject' => 'mailto:preventivi@example.it',
+           'vapid_public_key' => 'CHIAVE_PUBBLICA_VAPID',
+           'vapid_private_key' => <<<'PEM'
+   -----BEGIN PRIVATE KEY-----
+   CHIAVE_PRIVATA_VAPID
+   -----END PRIVATE KEY-----
+   PEM,
+           'ttl' => 86400,
+           'timeout' => 20,
+       ],
    ];
    ```
 
@@ -146,9 +160,19 @@ Per verificare subito le credenziali senza aspettare un alert, da **Attività pi
 
 Il test invia solo all'indirizzo indicato e non usa i destinatari BCC configurati. L'esito positivo restituisce `"ok": true`.
 
+#### Chiavi VAPID per le notifiche push
+
+Generare una sola coppia di chiavi sul server usando la stessa versione PHP del sito:
+
+```text
+/opt/plesk/php/8.3/bin/php <APP_ROOT>/bin/generate_vapid_keys.php
+```
+
+Il comando stampa il blocco `push` completo. Copiarlo in `app/config.local.php` e sostituire `vapid_subject` con un indirizzo `mailto:` reale. La chiave privata non deve essere pubblicata su GitHub. Conservare sempre la stessa coppia: cambiandola, i dispositivi dovranno autorizzare nuovamente le notifiche.
+
 ### 6. Attività pianificata
 
-Gli alert compaiono anche quando viene aperta la dashboard, ma l’attività pianificata è necessaria per generarli puntualmente e inviare le email.
+Gli alert compaiono anche quando viene aperta la dashboard, ma l’attività pianificata è necessaria per generarli puntualmente e inviare email e notifiche push.
 
 1. Aprire **Attività pianificate → Aggiungi attività**.
 2. Scegliere **Esegui uno script PHP**.
@@ -160,7 +184,7 @@ Gli alert compaiono anche quando viene aperta la dashboard, ma l’attività pia
    ```
 
 5. Programmare l’esecuzione ogni 5 minuti.
-6. Usare **Esegui ora**: l’output deve contenere `"ok": true`; la sezione `email` indica quanti messaggi sono stati inviati, saltati o non riusciti.
+6. Usare **Esegui ora**: l’output deve contenere `"ok": true`; le sezioni `email` e `push` indicano quanti messaggi sono stati inviati, saltati, scaduti o non riusciti.
 
 Se è disponibile solo “Esegui un comando” su Plesk Linux:
 
@@ -170,9 +194,37 @@ Se è disponibile solo “Esegui un comando” su Plesk Linux:
 
 ### 7. Verifica
 
-1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok`, `smtp_configured: true` e `xlsx_available: true`.
+1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok`, `smtp_configured: true`, `xlsx_available: true`, `pwa_available: true` e `push_configured: true`.
 2. Eseguire un accesso SSO usando l’ID del primo operatore.
 3. Creare una pratica e verificare che la scadenza mostrata sia 24 ore dopo la creazione.
+
+## Installazione su smartphone e notifiche push
+
+L'applicazione è una PWA: si installa dalla stessa URL del sottodominio e non richiede App Store, Play Store o un account Apple Developer.
+
+### Android
+
+1. Aprire il sottodominio con Chrome ed entrare tramite SSO.
+2. Premere **Installa app** nella barra laterale oppure usare il menu del browser → **Installa app**.
+3. Aprire l'icona **Preventivi** dalla schermata Home.
+4. Premere **Attiva notifiche** e autorizzare il browser.
+
+### iPhone e iPad
+
+Le notifiche Web Push richiedono iOS/iPadOS 16.4 o successivo e la web app aggiunta alla schermata Home.
+
+1. Aprire il sottodominio in Safari ed entrare tramite SSO.
+2. Usare **Condividi → Aggiungi alla schermata Home**.
+3. Aprire **Preventivi** dalla nuova icona, non dalla scheda Safari.
+4. Premere **Attiva notifiche** e accettare la richiesta di iOS.
+
+Il consenso vale per singolo dispositivo. **Notifiche attive · Disattiva** rimuove soltanto il dispositivo corrente. Le push sono associate all'utente SSO e vengono inviate insieme agli alert delle 12 ore, 24 ore e ai follow-up dei 3 giorni.
+
+Dopo aver autorizzato un dispositivo, è possibile inviare subito una notifica di prova da Plesk sostituendo l'ID utente:
+
+```text
+/opt/plesk/php/8.3/bin/php <APP_ROOT>/bin/test_push.php 12
+```
 
 ## SSO senza username
 
@@ -236,14 +288,16 @@ POST consigliato:
    database/migrations/20260716_users_sso_and_notifications.sql
    database/migrations/20260716_add_user_roles.sql
    database/migrations/20260716_add_super_role.sql
+   database/migrations/20260717_add_web_push.sql
    ```
 
-4. Se le prime due migration erano già state importate, eseguire soltanto `database/migrations/20260716_add_super_role.sql`.
-5. La migration ruoli iniziale imposta tutti come `operator` e promuove automaticamente ad `admin` il primo utente attivo per evitare di bloccare l'amministrazione.
-6. Per creare il supervisore, impostare `role = 'super'` sull'utente desiderato dalla tabella `users` in phpMyAdmin.
-7. Verificare e correggere gli altri ruoli dalla tabella `users` in phpMyAdmin.
-8. Aggiornare manualmente tutte le email provvisorie `@example.invalid` con gli indirizzi reali degli operatori.
-9. Aggiornare il software chiamante affinché passi `id` invece di `operator` o `username`.
+4. Per aggiornare la versione immediatamente precedente, che include già il ruolo `super`, importare soltanto `database/migrations/20260717_add_web_push.sql`.
+5. Se `users.role` non accetta ancora il valore `super`, importare prima `20260716_add_super_role.sql` e poi `20260717_add_web_push.sql`.
+6. La migration ruoli iniziale imposta tutti come `operator` e promuove automaticamente ad `admin` il primo utente attivo per evitare di bloccare l'amministrazione.
+7. Per creare il supervisore, impostare `role = 'super'` sull'utente desiderato dalla tabella `users` in phpMyAdmin.
+8. Verificare e correggere gli altri ruoli dalla tabella `users` in phpMyAdmin.
+9. Aggiornare manualmente tutte le email provvisorie `@example.invalid` con gli indirizzi reali degli operatori.
+10. Aggiornare il software chiamante affinché passi `id` invece di `operator` o `username`.
 
 ## Aggiornamenti futuri
 

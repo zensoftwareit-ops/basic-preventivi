@@ -175,7 +175,8 @@ function render_public_error(string $title, string $message): void
     $messageSafe = e($message);
     echo <<<HTML
 <!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{$titleSafe} · {$appName}</title><link rel="stylesheet" href="assets/app.css"></head>
+<meta name="theme-color" content="#2f7df4"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<title>{$titleSafe} · {$appName}</title><link rel="stylesheet" href="assets/app.css?v=20260717"></head>
 <body class="public-page"><main class="public-card"><div class="brand-mark">B</div><h1>{$titleSafe}</h1><p>{$messageSafe}</p></main></body></html>
 HTML;
 }

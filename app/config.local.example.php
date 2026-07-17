@@ -30,4 +30,16 @@ return [
             // 'direzione@example.it',
         ],
     ],
+    'push' => [
+        'enabled' => true,
+        'vapid_subject' => 'mailto:preventivi@example.it',
+        'vapid_public_key' => 'CHIAVE_PUBBLICA_GENERATA_DAL_COMANDO_VAPID',
+        'vapid_private_key' => <<<'PEM'
+-----BEGIN PRIVATE KEY-----
+INCOLLARE_QUI_LA_CHIAVE_PRIVATA_GENERATA
+-----END PRIVATE KEY-----
+PEM,
+        'ttl' => 86400,
+        'timeout' => 20,
+    ],
 ];
