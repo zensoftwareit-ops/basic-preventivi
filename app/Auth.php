@@ -16,6 +16,17 @@ final class Auth
             return false;
         }
 
+        return self::loginActiveUser($userId, 'sso');
+    }
+
+    public static function completeMobileActivation(int $userId): bool
+    {
+        return $userId > 0 && self::loginActiveUser($userId, 'mobile_activation');
+    }
+
+    private static function loginActiveUser(int $userId, string $source): bool
+    {
+
         $pdo = Database::connection();
         $userStatement = $pdo->prepare(
             "SELECT id, username, first_name, last_name, email, role,
@@ -36,7 +47,7 @@ final class Auth
         $_SESSION['user'] = $user;
         $_SESSION['authenticated_at'] = time();
         self::logAttempt($userId, true, (int) $user['id']);
-        self::rememberDevice((int) $user['id']);
+        self::rememberDevice((int) $user['id'], $source);
 
         return true;
     }
@@ -162,7 +173,7 @@ final class Auth
         }
     }
 
-    private static function rememberDevice(int $userId): void
+    private static function rememberDevice(int $userId, string $source): void
     {
         try {
             $pdo = Database::connection();
@@ -191,7 +202,7 @@ final class Auth
             ]);
             $_SESSION['device_session_id'] = (int) $pdo->lastInsertId();
             $_SESSION['device_session_touched_at'] = time();
-            $_SESSION['auth_source'] = 'sso';
+            $_SESSION['auth_source'] = $source;
             self::writeDeviceCookie($token);
         } catch (Throwable) {
             // La sessione PHP ottenuta via SSO continua a funzionare anche se la tabella non è ancora migrata.

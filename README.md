@@ -8,6 +8,7 @@ Repository: <https://github.com/zensoftwareit-ops/basic-preventivi>
 
 - SSO senza form con `id` utente e token condiviso;
 - dopo il primo SSO, accesso persistente e revocabile sul singolo dispositivo per 180 giorni di inattività;
+- dalla versione desktop l'operatore può generare un QR personale, monouso e valido 10 minuti per collegare lo smartphone senza esporre il token SSO condiviso;
 - l’utente deve esistere nella tabella `users` ed essere attivo;
 - ogni utente ha ruolo `operator`, `admin` oppure `super`;
 - `admin` e `super` vedono **Dati base** e possono eliminare definitivamente i preventivi;
@@ -197,7 +198,7 @@ Se è disponibile solo “Esegui un comando” su Plesk Linux:
 
 ### 7. Verifica
 
-1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok`, `smtp_configured: true`, `xlsx_available: true`, `pwa_available: true`, `push_configured: true` e `device_login_available: true`.
+1. Aprire `https://preventivi.example.it/health.php`: deve rispondere con stato `ok`, `smtp_configured: true`, `xlsx_available: true`, `pwa_available: true`, `push_configured: true`, `device_login_available: true` e `mobile_pair_available: true`.
 2. Eseguire un accesso SSO usando l’ID del primo operatore.
 3. Creare una pratica e verificare che la scadenza mostrata sia 24 ore dopo la creazione.
 
@@ -207,19 +208,20 @@ L'applicazione è una PWA: si installa dalla stessa URL del sottodominio e non r
 
 ### Primo accesso sul telefono
 
-Non esiste e non serve un form di login. La prima attivazione deve partire dal software aziendale sullo stesso telefono:
+Non esiste e non serve un form di login. La prima attivazione parte dall'utente già autenticato sul computer:
 
-1. L'operatore apre il software aziendale dal telefono.
-2. Preme il pulsante **Apri Preventivi**, che fa navigare il browser verso `sso.php` passando il token condiviso e il suo `id`.
-3. `sso.php` verifica l'utente, crea la sessione dispositivo e apre la dashboard.
-4. Dalla dashboard l'operatore installa la PWA e attiva le notifiche.
+1. Dalla versione desktop premere **Collega smartphone · QR** nella barra laterale.
+2. Inquadrare il QR con la fotocamera dello smartphone entro 10 minuti.
+3. Il collegamento monouso autentica sul telefono lo stesso `id` presente nella sessione desktop e poi viene invalidato.
+4. Sul telefono compare automaticamente la procedura **Completa l'installazione**.
+5. Installare la PWA, aprirla dall'icona e attivare le notifiche.
 
-Da quel momento l'icona può essere aperta direttamente: il dispositivo riconosce l'operatore anche dopo la chiusura del browser o la scadenza della normale sessione PHP. La durata si rinnova all'uso ed è configurata con `device_session_days`; **Esci** revoca solamente il dispositivo corrente. Se il software aziendale non è utilizzabile sul telefono, deve mostrare un collegamento o QR che apra lo stesso endpoint SSO nel browser del telefono.
+Il QR non contiene il token SSO condiviso: contiene un codice casuale temporaneo del quale nel database viene conservato soltanto l'hash. Generare un nuovo QR invalida quello precedente. Da quel momento l'icona può essere aperta direttamente: il dispositivo riconosce l'operatore anche dopo la chiusura del browser o la scadenza della normale sessione PHP. La durata si rinnova all'uso ed è configurata con `device_session_days`; **Esci** revoca solamente il dispositivo corrente.
 
 ### Android
 
-1. Aprire il sottodominio con Chrome ed entrare tramite SSO.
-2. Premere **Installa app** nella barra laterale oppure usare il menu del browser → **Installa app**.
+1. Inquadrare con Chrome il QR generato dalla versione desktop.
+2. Premere **Installa app** nella procedura guidata oppure usare il menu del browser → **Installa app**.
 3. Aprire l'icona **Preventivi** dalla schermata Home.
 4. Premere **Attiva notifiche** e autorizzare il browser.
 
@@ -229,7 +231,7 @@ Le notifiche Web Push richiedono iOS/iPadOS 16.4 o successivo e la web app aggiu
 
 Per copiare automaticamente nella nuova web app il cookie ottenuto con il primo SSO è consigliato iOS/iPadOS 17.2 o successivo. L'ordine corretto è sempre: accesso SSO in Safari, aggiunta alla schermata Home, apertura dall'icona. Se l'icona era stata creata prima dell'accesso, eliminarla e ripetere l'installazione dopo il login SSO.
 
-1. Aprire il sottodominio in Safari ed entrare tramite SSO.
+1. Inquadrare il QR generato dalla versione desktop e aprire il collegamento in Safari.
 2. Usare **Condividi → Aggiungi alla schermata Home**.
 3. Aprire **Preventivi** dalla nuova icona, non dalla scheda Safari.
 4. Premere **Attiva notifiche** e accettare la richiesta di iOS.
@@ -310,11 +312,12 @@ POST consigliato:
    database/migrations/20260716_add_super_role.sql
    database/migrations/20260717_add_web_push.sql
    database/migrations/20260717_add_device_sessions.sql
+   database/migrations/20260717_add_mobile_activation_tokens.sql
    ```
 
-4. Per aggiornare la versione immediatamente precedente, che include già il ruolo `super`, importare `20260717_add_web_push.sql` e poi `20260717_add_device_sessions.sql`.
-5. Se la migration Web Push è già stata importata, importare soltanto `20260717_add_device_sessions.sql`.
-6. Se `users.role` non accetta ancora il valore `super`, importare prima `20260716_add_super_role.sql`, poi le due migration del 17 luglio.
+4. Per aggiornare la versione immediatamente precedente, che include già il ruolo `super`, importare nell'ordine le tre migration del 17 luglio.
+5. Se Web Push e sessioni dispositivo sono già state installate, importare soltanto `20260717_add_mobile_activation_tokens.sql`.
+6. Se `users.role` non accetta ancora il valore `super`, importare prima `20260716_add_super_role.sql`, poi le tre migration del 17 luglio.
 7. La migration ruoli iniziale imposta tutti come `operator` e promuove automaticamente ad `admin` il primo utente attivo per evitare di bloccare l'amministrazione.
 8. Per creare il supervisore, impostare `role = 'super'` sull'utente desiderato dalla tabella `users` in phpMyAdmin.
 9. Verificare e correggere gli altri ruoli dalla tabella `users` in phpMyAdmin.
@@ -329,6 +332,10 @@ POST consigliato:
 4. Premere **Deploy from Repository**.
 5. Importare eventuali nuove migration indicate nelle note di rilascio.
 6. Verificare `health.php`, SSO e l’attività pianificata.
+
+## Componente QR incluso
+
+Il file locale `public/assets/vendor/qrcode.js` deriva da [qrcode-generator di Kazuhiko Arase](https://github.com/kazuhikoarase/qrcode-generator), distribuito con licenza MIT. La licenza è conservata in `public/assets/vendor/qrcode.LICENSE`. Il QR viene generato interamente nel browser e nessun URL di attivazione viene inviato a servizi esterni.
 
 ## Riferimenti Plesk
 

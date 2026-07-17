@@ -12,6 +12,13 @@ try {
         "SELECT COUNT(*) FROM information_schema.tables
          WHERE table_schema = DATABASE() AND table_name = 'device_sessions'"
     )->fetchColumn();
+    $mobilePairAvailable = (bool) $pdo->query(
+        "SELECT COUNT(*) FROM information_schema.tables
+         WHERE table_schema = DATABASE() AND table_name = 'mobile_activation_tokens'"
+    )->fetchColumn()
+        && is_file(__DIR__ . '/mobile_pair_create.php')
+        && is_file(__DIR__ . '/mobile_activate.php')
+        && is_file(__DIR__ . '/assets/vendor/qrcode.js');
     $mail = (array) config('mail', []);
     $smtpConfigured = !empty($mail['host'])
         && !empty($mail['username'])
@@ -30,6 +37,7 @@ try {
         'pwa_available' => is_file(__DIR__ . '/manifest.webmanifest') && is_file(__DIR__ . '/sw.js'),
         'push_configured' => $pushConfigured,
         'device_login_available' => $deviceSessionsAvailable,
+        'mobile_pair_available' => $mobilePairAvailable,
         'time' => date(DATE_ATOM),
     ], JSON_THROW_ON_ERROR);
 } catch (Throwable) {
